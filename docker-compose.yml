@@ -1,35 +1,37 @@
 version: '3.8'
 
 services:
-  # TimescaleDB (PostgreSQL with TimescaleDB extension)
-  db:
+  # PostgreSQL Database with TimescaleDB
+  postgres:
     image: timescale/timescaledb:latest-pg15
-    container_name: galileo-timescaledb
+    container_name: galileo-postgres
     environment:
-      POSTGRES_USER: galileo
-      POSTGRES_PASSWORD: galileo_secret
-      POSTGRES_DB: galileo
+      POSTGRES_USER: ${DATABASE_USER:-galileo}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-galileo_secret}
+      POSTGRES_DB: ${DATABASE_NAME:-galileo}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "5432:5432"
+      - "${DATABASE_PORT:-5432}:5432"
     volumes:
-      - timescale_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - postgres_data:/var/lib/postgresql/data
+      - ./ops/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/02-setup.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U galileo -d galileo"]
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-galileo} -d ${DATABASE_NAME:-galileo}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - galileo-network
+    restart: unless-stopped
 
   # Redis Cache & Message Broker
   redis:
     image: redis:7-alpine
     container_name: galileo-redis
-    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:-}
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -39,6 +41,7 @@ services:
       retries: 5
     networks:
       - galileo-network
+    restart: unless-stopped
 
   # MinIO Object Storage (S3-compatible)
   minio:
@@ -46,8 +49,8 @@ services:
     container_name: galileo-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: galileo
-      MINIO_ROOT_PASSWORD: galileo_secret_key
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-galileo_secret_key}
     ports:
       - "9000:9000"  # API
       - "9001:9001"  # Console
@@ -60,41 +63,94 @@ services:
       retries: 3
     networks:
       - galileo-network
+    restart: unless-stopped
 
-  # FastAPI Backend
+  # Main API (Simulation, ML, Processing)
   api:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: galileo-api
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
-    ports:
-      - "8000:8000"
+    command: uvicorn api.main:app --host 0.0.0.0 --port 5050 --workers 2
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       minio:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://galileo:galileo_secret@db:5432/galileo
+      - DATABASE_URL=postgresql://${DATABASE_USER:-galileo}:${DATABASE_PASSWORD:-galileo_secret}@postgres:5432/${DATABASE_NAME:-galileo}
       - REDIS_URL=redis://redis:6379/0
       - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=galileo
-      - MINIO_SECRET_KEY=galileo_secret_key
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-galileo_secret_key}
+      - MINIO_SECURE=false
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev_secret_key_change_in_production}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-true}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-100}
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    ports:
+      - "${GALILEO_API_PORT:-5050}:5050"
     volumes:
-      - .:/app
+      - ./data:/app/data
+      - ./checkpoints:/app/checkpoints
       - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5050/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - galileo-network
+    restart: unless-stopped
+
+  # Operations API (Auth, Jobs, Workflows)
+  ops-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: galileo-ops-api
+    command: uvicorn ops.main:app --host 0.0.0.0 --port 8000 --workers 2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${DATABASE_USER:-galileo}:${DATABASE_PASSWORD:-galileo_secret}@postgres:5432/${DATABASE_NAME:-galileo}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-galileo_secret_key}
+      - MINIO_SECURE=false
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev_secret_key_change_in_production}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "${OPS_API_PORT:-8000}:8000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
+    networks:
+      - galileo-network
+    restart: unless-stopped
 
   # Celery Worker for async tasks
   worker:
@@ -104,25 +160,26 @@ services:
     container_name: galileo-worker
     command: celery -A ops.tasks worker --loglevel=info --concurrency=4 -E
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       minio:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://galileo:galileo_secret@db:5432/galileo
+      - DATABASE_URL=postgresql://${DATABASE_USER:-galileo}:${DATABASE_PASSWORD:-galileo_secret}@postgres:5432/${DATABASE_NAME:-galileo}
       - REDIS_URL=redis://redis:6379/0
       - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=galileo
-      - MINIO_SECRET_KEY=galileo_secret_key
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-galileo_secret_key}
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
     volumes:
-      - .:/app
+      - ./data:/app/data
       - ./logs:/app/logs
     networks:
       - galileo-network
+    restart: unless-stopped
 
   # Celery Beat for scheduled tasks
   beat:
@@ -132,18 +189,19 @@ services:
     container_name: galileo-beat
     command: celery -A ops.tasks beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://galileo:galileo_secret@db:5432/galileo
+      - DATABASE_URL=postgresql://${DATABASE_USER:-galileo}:${DATABASE_PASSWORD:-galileo_secret}@postgres:5432/${DATABASE_NAME:-galileo}
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
     volumes:
-      - .:/app
+      - ./data:/app/data
     networks:
       - galileo-network
+    restart: unless-stopped
 
   # Flower for Celery monitoring
   flower:
@@ -162,8 +220,40 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
     networks:
       - galileo-network
+    restart: unless-stopped
 
-  # Prometheus for metrics
+  # Next.js Frontend UI
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:5050}
+        - NEXT_PUBLIC_OPS_API_URL=${NEXT_PUBLIC_OPS_API_URL:-http://localhost:8000}
+        - NEXT_PUBLIC_CESIUM_ION_TOKEN=${NEXT_PUBLIC_CESIUM_ION_TOKEN}
+    container_name: galileo-ui
+    depends_on:
+      - api
+      - ops-api
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:5050}
+      - NEXT_PUBLIC_OPS_API_URL=${NEXT_PUBLIC_OPS_API_URL:-http://localhost:8000}
+      - NEXT_PUBLIC_CESIUM_ION_TOKEN=${NEXT_PUBLIC_CESIUM_ION_TOKEN}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-dev_nextauth_secret_change_in_production}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - galileo-network
+    restart: unless-stopped
+
+  # Prometheus Metrics Collection
   prometheus:
     image: prom/prometheus:latest
     container_name: galileo-prometheus
@@ -173,9 +263,9 @@ services:
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
-      - ./ops/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     networks:
       - galileo-network
@@ -184,24 +274,25 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    restart: unless-stopped
 
-  # Grafana for visualization
+  # Grafana Monitoring Dashboard
   grafana:
     image: grafana/grafana:latest
     container_name: galileo-grafana
-    ports:
-      - "3001:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=galileo_admin
-      - GF_INSTALL_PLUGINS=grafana-piechart-panel
-      - GF_SERVER_ROOT_URL=http://localhost:3001
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./ops/grafana/provisioning:/etc/grafana/provisioning
-      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-galileo_admin}
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,grafana-piechart-panel
+      - GF_SERVER_ROOT_URL=${GRAFANA_URL:-http://localhost:3001}
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+      - grafana_data:/var/lib/grafana
     networks:
       - galileo-network
     healthcheck:
@@ -209,27 +300,26 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    restart: unless-stopped
 
-  # Next.js UI (development mode)
-  ui:
-    build:
-      context: ./ui
-      dockerfile: Dockerfile.dev
-    container_name: galileo-ui
-    command: npm run dev
-    ports:
-      - "3000:3000"
+  # Jaeger Distributed Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: galileo-jaeger
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
-    volumes:
-      - ./ui:/app
-      - /app/node_modules
-      - /app/.next
-    depends_on:
-      - api
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
     networks:
       - galileo-network
+    restart: unless-stopped
 
   # Nginx reverse proxy (optional, for production)
   nginx:
@@ -243,6 +333,7 @@ services:
       - ./ops/nginx/ssl:/etc/nginx/ssl
     depends_on:
       - api
+      - ops-api
       - ui
     networks:
       - galileo-network
@@ -250,7 +341,7 @@ services:
       - production
 
 volumes:
-  timescale_data:
+  postgres_data:
     driver: local
   redis_data:
     driver: local

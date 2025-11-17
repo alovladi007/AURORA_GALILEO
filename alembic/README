@@ -1,0 +1,76 @@
+# Alembic Migrations for GALILEO V2.0
+
+Database migration management using Alembic.
+
+## Quick Start
+
+### Create a new migration
+
+```bash
+# Auto-generate migration from model changes
+alembic revision --autogenerate -m "description of changes"
+
+# Create empty migration
+alembic revision -m "description"
+```
+
+### Apply migrations
+
+```bash
+# Upgrade to latest
+alembic upgrade head
+
+# Upgrade by 1 version
+alembic upgrade +1
+
+# Downgrade by 1 version
+alembic downgrade -1
+
+# Downgrade to specific revision
+alembic downgrade <revision_id>
+```
+
+### View migration history
+
+```bash
+# Show current version
+alembic current
+
+# Show migration history
+alembic history
+
+# Show pending migrations
+alembic history --verbose
+```
+
+## Environment Variables
+
+Set `DATABASE_URL` to override the default database connection:
+
+```bash
+export DATABASE_URL="postgresql://user:pass@host:port/dbname"
+alembic upgrade head
+```
+
+## Migration Best Practices
+
+1. Always review auto-generated migrations
+2. Test migrations on staging before production
+3. Include both upgrade() and downgrade() functions
+4. Keep migrations small and focused
+5. Use meaningful revision messages
+6. Never modify existing migrations that have been deployed
+
+## Troubleshooting
+
+**"Target database is not up to date"**:
+```bash
+alembic stamp head  # Mark current DB state
+```
+
+**"Multiple head revisions"**:
+```bash
+alembic merge heads -m "merge heads"
+```
+
+For more information: https://alembic.sqlalchemy.org/

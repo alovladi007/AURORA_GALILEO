@@ -1,7 +1,9 @@
 import axios from 'axios'
 import { getSession } from 'next-auth/react'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+// Use environment variable with correct default port for main API
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050'
+const OPS_API_URL = process.env.NEXT_PUBLIC_OPS_API_URL || 'http://localhost:8000'
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -13,16 +15,17 @@ export const apiClient = axios.create({
 // Add auth token to requests
 apiClient.interceptors.request.use(async (config) => {
   const session = await getSession()
-  
-  // For demo purposes, use a default token if not authenticated
-  // In production, this would require proper authentication
+
+  // Only add auth token if session exists
+  // Production mode requires proper authentication
   if (session?.accessToken) {
     config.headers.Authorization = `Bearer ${session.accessToken}`
-  } else {
-    // Demo token for testing
-    config.headers.Authorization = `Bearer demo-token-for-testing`
+  } else if (process.env.NODE_ENV === 'development') {
+    // In development, allow unauthenticated requests
+    // The API will handle authentication based on AUTH_ENABLED setting
+    console.warn('No session found. Requests may require authentication.')
   }
-  
+
   return config
 })
 

@@ -5,6 +5,7 @@ const path = require('path');
 
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone', // Enable standalone output for Docker
   webpack: (config, { isServer }) => {
     // CesiumJS configuration
     if (!isServer) {

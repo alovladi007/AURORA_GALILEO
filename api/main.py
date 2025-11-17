@@ -9,13 +9,21 @@ Provides REST API endpoints for:
 - Platform status and documentation
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from pydantic import BaseModel
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, PlainTextResponse
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import os
+import time
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+# Import authentication
+from api.auth import get_current_user, get_current_active_user
 
 # Import GeoSense modules (optional - gracefully degrade if not available)
 try:
@@ -35,20 +43,66 @@ except ImportError as e:
     IMPORTS_AVAILABLE = False
     import_error_message = str(e)
 
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(
     title="GeoSense Platform API",
     description="AI-enhanced space-based geophysical sensing platform",
     version="0.4.0"
 )
 
-# Enable CORS for browser access
+# Add rate limiter to app state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS Configuration - secure by default
+CORS_ORIGINS_STR = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")
+CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_STR.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,  # Specific origins only, no wildcards
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    max_age=600,
 )
+
+# Prometheus Metrics
+REQUEST_COUNT = Counter(
+    'galileo_api_requests_total',
+    'Total API requests',
+    ['method', 'endpoint', 'status']
+)
+
+REQUEST_DURATION = Histogram(
+    'galileo_api_request_duration_seconds',
+    'API request duration',
+    ['method', 'endpoint']
+)
+
+# Middleware for Prometheus metrics
+@app.middleware("http")
+async def prometheus_middleware(request: Request, call_next):
+    """Track request metrics"""
+    start_time = time.time()
+    response = await call_next(request)
+    duration = time.time() - start_time
+
+    # Record metrics
+    REQUEST_COUNT.labels(
+        method=request.method,
+        endpoint=request.url.path,
+        status=response.status_code
+    ).inc()
+
+    REQUEST_DURATION.labels(
+        method=request.method,
+        endpoint=request.url.path
+    ).observe(duration)
+
+    return response
 
 # ============================================================================
 # Request/Response Models
@@ -56,37 +110,37 @@ app.add_middleware(
 
 class OrbitalElements(BaseModel):
     """Orbital elements (a, e, i, Ω, ω, ν) in km and degrees."""
-    semi_major_axis: float  # km
-    eccentricity: float
-    inclination: float  # degrees
-    raan: float  # degrees (Ω)
-    argument_of_perigee: float  # degrees (ω)
-    true_anomaly: float  # degrees (ν)
+    semi_major_axis: float = Field(..., gt=6371.0, lt=1000000.0, description="Semi-major axis in km (must be > Earth radius)")
+    eccentricity: float = Field(..., ge=0.0, lt=1.0, description="Eccentricity (0 ≤ e < 1 for elliptical orbits)")
+    inclination: float = Field(..., ge=0.0, le=180.0, description="Inclination in degrees (0-180)")
+    raan: float = Field(..., ge=0.0, lt=360.0, description="Right ascension of ascending node in degrees (0-360)")
+    argument_of_perigee: float = Field(..., ge=0.0, lt=360.0, description="Argument of perigee in degrees (0-360)")
+    true_anomaly: float = Field(..., ge=0.0, lt=360.0, description="True anomaly in degrees (0-360)")
 
 class PropagationRequest(BaseModel):
     """Request for orbit propagation."""
     orbital_elements: OrbitalElements
-    duration: float  # seconds
-    time_step: float = 10.0  # seconds
+    duration: float = Field(..., gt=0.0, le=31536000.0, description="Propagation duration in seconds (max 1 year)")
+    time_step: float = Field(10.0, gt=0.0, le=3600.0, description="Time step in seconds (max 1 hour)")
 
 class FormationRequest(BaseModel):
     """Request for formation flying simulation."""
-    delta_state: List[float]  # [x, y, z, vx, vy, vz] in km and km/s
-    mean_motion: float  # rad/s
-    duration: float  # seconds
-    time_step: float = 10.0  # seconds
+    delta_state: List[float] = Field(..., min_items=6, max_items=6, description="Relative state [x,y,z,vx,vy,vz] in km and km/s")
+    mean_motion: float = Field(..., gt=0.0, description="Mean motion in rad/s")
+    duration: float = Field(..., gt=0.0, le=86400.0, description="Duration in seconds (max 1 day)")
+    time_step: float = Field(10.0, gt=0.0, le=600.0, description="Time step in seconds (max 10 min)")
 
 class PhaseRequest(BaseModel):
     """Request for phase measurement calculation."""
-    range_km: float
-    wavelength: float = 1064e-9  # meters (default Nd:YAG)
+    range_km: float = Field(..., gt=0.0, le=10000.0, description="Range in km (max 10,000 km)")
+    wavelength: float = Field(1064e-9, gt=0.0, le=10e-6, description="Wavelength in meters (default 1064nm Nd:YAG)")
 
 class NoiseRequest(BaseModel):
     """Request for noise budget calculation."""
-    power: float  # Watts
-    range_km: float
-    range_rate_km_s: float
-    frequency_stability: float = 1e-13
+    power: float = Field(..., gt=0.0, le=1000.0, description="Laser power in Watts (max 1kW)")
+    range_km: float = Field(..., gt=0.0, le=10000.0, description="Range in km")
+    range_rate_km_s: float = Field(..., ge=-10.0, le=10.0, description="Range rate in km/s")
+    frequency_stability: float = Field(1e-13, gt=0.0, le=1e-6, description="Frequency stability")
 
 # ============================================================================
 # Endpoints
@@ -124,7 +178,16 @@ async def health_check():
         ]
     }
 
+@app.get("/metrics")
+async def metrics():
+    """
+    Prometheus metrics endpoint.
+    Returns metrics in Prometheus text format.
+    """
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 @app.post("/api/propagate")
+@limiter.limit("100/minute")  # Rate limiting
 async def propagate_orbit(request: PropagationRequest):
     """
     Propagate an orbit from orbital elements.
