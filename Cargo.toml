@@ -1,8 +1,6 @@
 [workspace]
 members = [
-    "control/dynamics",
-    "control/attitude",
-    "control/power",
+    "control-rs",
 ]
 resolver = "2"
 
