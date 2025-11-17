@@ -5,18 +5,44 @@ GALILEO V2.0 - Hardware-in-the-Loop (HIL) Module
 Hardware-in-the-loop testing infrastructure.
 
 Modules:
-    emulator: Software optical bench emulator
+    optical_bench: Software optical bench emulator
     drivers: Mock hardware drivers (timing cards, ADCs)
-    scenarios: Test scenario scripts
-    realtime: Real-time stream processing
 """
+
+from hil.optical_bench import (
+    OpticalBenchEmulator,
+    LaserParameters,
+    OpticalPath,
+    simulate_orbital_ranging,
+)
+
+from hil.drivers import (
+    TimingCardDriver,
+    MockTimingCard,
+    TimingCardConfig,
+    ADCDriver,
+    MockADC,
+    ADCConfig,
+    ScenarioRunner,
+    register_default_scenarios,
+)
 
 __version__ = "0.1.0"
 
 __all__ = [
+    # Optical bench
     "OpticalBenchEmulator",
+    "LaserParameters",
+    "OpticalPath",
+    "simulate_orbital_ranging",
+    # Hardware drivers
     "TimingCardDriver",
+    "MockTimingCard",
+    "TimingCardConfig",
     "ADCDriver",
+    "MockADC",
+    "ADCConfig",
+    # Scenarios
     "ScenarioRunner",
-    "RealtimeStreamer",
+    "register_default_scenarios",
 ]
