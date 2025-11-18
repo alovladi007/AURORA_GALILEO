@@ -2,7 +2,7 @@ import NextAuth from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { apiClient } from "@/lib/api-client"
 
-export const authOptions = {
+const authOptions = {
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -10,13 +10,13 @@ export const authOptions = {
         username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" }
       },
-      async authorize(credentials) {
+      async authorize(credentials: any) {
         try {
           const response = await apiClient.post('/auth/token', {
             username: credentials?.username,
             password: credentials?.password
           })
-          
+
           if (response.data.access_token) {
             // Get user info
             const userResponse = await apiClient.get('/auth/me', {
@@ -24,7 +24,7 @@ export const authOptions = {
                 Authorization: `Bearer ${response.data.access_token}`
               }
             })
-            
+
             return {
               id: userResponse.data.id,
               name: userResponse.data.username,
@@ -32,7 +32,7 @@ export const authOptions = {
               accessToken: response.data.access_token
             }
           }
-          
+
           return null
         } catch (error) {
           console.error('Auth error:', error)
@@ -42,14 +42,14 @@ export const authOptions = {
     })
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }: any) {
       if (user) {
         token.accessToken = user.accessToken
         token.id = user.id
       }
       return token
     },
-    async session({ session, token }) {
+    async session({ session, token }: any) {
       session.accessToken = token.accessToken
       session.user.id = token.id
       return session

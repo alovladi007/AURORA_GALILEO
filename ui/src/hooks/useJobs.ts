@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api-client'
-import { useAuth } from './useAuth'
 
 interface Job {
   id: string
@@ -16,7 +15,6 @@ interface Job {
 }
 
 export function useJobs() {
-  const { isAuthenticated } = useAuth()
   const queryClient = useQueryClient()
 
   const { data: jobs, isLoading, refetch } = useQuery<Job[]>({
@@ -25,7 +23,7 @@ export function useJobs() {
       const response = await apiClient.get('/ops/jobs')
       return response.data
     },
-    enabled: isAuthenticated,
+    enabled: true, // Enable without auth for now
     refetchInterval: 5000, // Refresh every 5 seconds
   })
 

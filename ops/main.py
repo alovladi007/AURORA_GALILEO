@@ -8,19 +8,20 @@ import os
 import logging
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy import text
 
-from models import Base, get_db, User, ProcessingJob, AuditLog
-from schemas import (
+from ops.models import Base, get_db, User, ProcessingJob, AuditLog
+from ops.schemas import (
     UserCreate, UserResponse, Token, TokenData,
     JobCreate, JobResponse, JobStatus,
     PlanRequest, IngestRequest, ProcessRequest, CatalogRequest
 )
-from worker import (
+from ops.worker import (
     execute_plan_task, execute_ingest_task,
     execute_process_task, execute_catalog_task
 )
-from middleware import audit_log_middleware
-from minio_client import get_minio_client
+from ops.middleware import audit_log_middleware
+from ops.minio_client import get_minio_client
 import uvicorn
 
 # Configure logging
@@ -37,6 +38,9 @@ if not SECRET_KEY:
     raise ValueError("JWT_SECRET_KEY environment variable must be set for security")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+
+# Authentication toggle (for development)
+AUTH_ENABLED = os.getenv("AUTH_ENABLED", "true").lower() == "true"
 
 # CORS origins - parse from comma-separated list
 CORS_ORIGINS_STR = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")
@@ -113,11 +117,34 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
-    
+
     user = db.query(User).filter(User.username == token_data.username).first()
     if user is None:
         raise credentials_exception
     return user
+
+async def get_current_user_optional(db = Depends(get_db)):
+    """Get current user if AUTH_ENABLED, otherwise return/create dev user"""
+    if not AUTH_ENABLED:
+        logger.warning("Authentication disabled - using dev user")
+        # Get or create dev user
+        dev_user = db.query(User).filter(User.username == "dev").first()
+        if not dev_user:
+            # Use a pre-hashed password to avoid bcrypt initialization issues
+            # This is the bcrypt hash of "dev" - only used in development mode
+            dev_user = User(
+                username="dev",
+                email="dev@example.com",
+                hashed_password="$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYqVr/1VXQ6"
+            )
+            db.add(dev_user)
+            db.commit()
+            db.refresh(dev_user)
+        return dev_user
+
+    # If AUTH_ENABLED, require authentication
+    # This will fail if no token provided, which is correct
+    return await get_current_user(oauth2_scheme, db)
 
 # Root endpoint
 @app.get("/")
@@ -187,7 +214,7 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
 async def create_plan(
     request: PlanRequest,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_optional),
     db = Depends(get_db)
 ):
     """Create processing plan for satellite constellation"""
@@ -209,7 +236,7 @@ async def create_plan(
 async def ingest_data(
     request: IngestRequest,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_optional),
     db = Depends(get_db)
 ):
     """Ingest raw satellite data"""
@@ -231,7 +258,7 @@ async def ingest_data(
 async def process_data(
     request: ProcessRequest,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_optional),
     db = Depends(get_db)
 ):
     """Process gravity field from satellite data"""
@@ -253,7 +280,7 @@ async def process_data(
 async def catalog_products(
     request: CatalogRequest,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_optional),
     db = Depends(get_db)
 ):
     """Catalog processed gravity products"""
@@ -276,7 +303,7 @@ async def list_jobs(
     skip: int = 0,
     limit: int = 100,
     status: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_optional),
     db = Depends(get_db)
 ):
     """List processing jobs"""
@@ -291,7 +318,7 @@ async def list_jobs(
 @app.get("/ops/jobs/{job_id}", response_model=JobResponse)
 async def get_job(
     job_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_optional),
     db = Depends(get_db)
 ):
     """Get specific job details"""
@@ -308,7 +335,7 @@ async def get_job(
 @app.delete("/ops/jobs/{job_id}")
 async def cancel_job(
     job_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_optional),
     db = Depends(get_db)
 ):
     """Cancel a processing job"""
@@ -334,12 +361,12 @@ async def health_check(db = Depends(get_db)):
     """Health check endpoint"""
     try:
         # Check database
-        db.execute("SELECT 1")
-        
+        db.execute(text("SELECT 1"))
+
         # Check MinIO
         minio_client = get_minio_client()
         minio_client.list_buckets()
-        
+
         return {
             "status": "healthy",
             "database": "connected",

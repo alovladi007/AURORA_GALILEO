@@ -7,17 +7,21 @@
  * Integrates all 11 services for comprehensive mission management.
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Activity, Satellite, Zap, Database, Settings,
-  PlayCircle, PauseCircle, BarChart3, Shield, Cpu
+  PlayCircle, BarChart3, Shield, Cpu, RefreshCw
 } from 'lucide-react'
+import { JobConsole } from './JobConsole'
+import { api } from '@/lib/api-client'
+import toast from 'react-hot-toast'
 
 interface DashboardProps {
   className?: string
 }
 
 type ServicePanel =
+  | 'jobs'
   | 'simulation'
   | 'inversion'
   | 'control'
@@ -28,22 +32,59 @@ type ServicePanel =
   | 'database'
 
 export function MissionDashboard({ className = '' }: DashboardProps) {
-  const [activePanel, setActivePanel] = useState<ServicePanel>('simulation')
+  const [activePanel, setActivePanel] = useState<ServicePanel>('jobs')
   const [systemStatus, setSystemStatus] = useState({
-    api: 'healthy',
-    database: 'healthy',
-    celery: 'healthy',
-    minio: 'healthy'
+    api: 'unknown',
+    database: 'unknown',
+    celery: 'unknown',
+    minio: 'unknown'
   })
+  const [loading, setLoading] = useState(false)
+
+  // Check system health on mount
+  useEffect(() => {
+    checkSystemHealth()
+    const interval = setInterval(checkSystemHealth, 30000) // Check every 30 seconds
+    return () => clearInterval(interval)
+  }, [])
+
+  const checkSystemHealth = async () => {
+    try {
+      const response = await api.healthCheck()
+      const health = response.data
+
+      setSystemStatus({
+        api: health.status === 'healthy' || health.database ? 'healthy' : 'unhealthy',
+        database: health.database ? 'healthy' : 'unhealthy',
+        celery: health.celery ? 'healthy' : 'unhealthy',
+        minio: health.minio ? 'healthy' : 'unhealthy'
+      })
+    } catch (error) {
+      setSystemStatus({
+        api: 'unhealthy',
+        database: 'unknown',
+        celery: 'unknown',
+        minio: 'unknown'
+      })
+    }
+  }
 
   const services = [
+    {
+      id: 'jobs' as ServicePanel,
+      name: 'Job Console',
+      icon: Activity,
+      color: 'blue',
+      description: 'Active processing jobs & history',
+      showComponent: true
+    },
     {
       id: 'simulation' as ServicePanel,
       name: 'Simulation',
       icon: Satellite,
       color: 'blue',
       description: 'Orbit propagation & measurements',
-      stats: { active: 2, total: 5 }
+      showComponent: false
     },
     {
       id: 'inversion' as ServicePanel,
@@ -51,7 +92,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: BarChart3,
       color: 'green',
       description: 'Gravity field estimation',
-      stats: { active: 1, total: 3 }
+      showComponent: false
     },
     {
       id: 'control' as ServicePanel,
@@ -59,7 +100,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: Settings,
       color: 'purple',
       description: 'Formation control & maneuvers',
-      stats: { active: 0, total: 2 }
+      showComponent: false
     },
     {
       id: 'emulator' as ServicePanel,
@@ -67,7 +108,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: Activity,
       color: 'orange',
       description: 'Real-time signal emulation',
-      stats: { active: 1, total: 1 }
+      showComponent: false
     },
     {
       id: 'ml' as ServicePanel,
@@ -75,7 +116,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: Cpu,
       color: 'pink',
       description: 'PINN & U-Net training',
-      stats: { active: 0, total: 4 }
+      showComponent: false
     },
     {
       id: 'workflow' as ServicePanel,
@@ -83,7 +124,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: PlayCircle,
       color: 'indigo',
       description: 'End-to-end pipelines',
-      stats: { active: 3, total: 8 }
+      showComponent: false
     },
     {
       id: 'tasks' as ServicePanel,
@@ -91,7 +132,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: Zap,
       color: 'yellow',
       description: 'Async task queue',
-      stats: { active: 5, total: 12 }
+      showComponent: false
     },
     {
       id: 'database' as ServicePanel,
@@ -99,9 +140,138 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: Database,
       color: 'teal',
       description: 'Data persistence',
-      stats: { active: 0, total: 0 }
+      showComponent: false
     },
   ]
+
+  const handleCreateJob = async (type: 'plan' | 'ingest' | 'process' | 'catalog') => {
+    setLoading(true)
+    try {
+      let result
+      const defaultData = {
+        config: { algorithm: 'variational', degree_max: 60 }
+      }
+
+      switch (type) {
+        case 'plan':
+          result = await api.createPlan(defaultData)
+          break
+        case 'ingest':
+          result = await api.createIngest(defaultData)
+          break
+        case 'process':
+          result = await api.createProcess(defaultData)
+          break
+        case 'catalog':
+          result = await api.createCatalog(defaultData)
+          break
+      }
+
+      toast.success(`${type.toUpperCase()} job created successfully!`)
+    } catch (error: any) {
+      toast.error(`Failed to create ${type} job: ${error.response?.data?.detail || error.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const renderServiceContent = () => {
+    const service = services.find(s => s.id === activePanel)
+
+    if (service?.showComponent && activePanel === 'jobs') {
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Job Console
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Monitor and manage processing jobs
+              </p>
+            </div>
+            <button
+              onClick={checkSystemHealth}
+              className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+              title="Refresh system status"
+            >
+              <RefreshCw className="w-5 h-5" />
+            </button>
+          </div>
+
+          <JobConsole />
+
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Create New Job
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <button
+                onClick={() => handleCreateJob('plan')}
+                disabled={loading}
+                className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="text-sm font-medium">Mission Plan</div>
+                <div className="text-xs opacity-75 mt-1">Orbit design</div>
+              </button>
+              <button
+                onClick={() => handleCreateJob('ingest')}
+                disabled={loading}
+                className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="text-sm font-medium">Data Ingest</div>
+                <div className="text-xs opacity-75 mt-1">Import data</div>
+              </button>
+              <button
+                onClick={() => handleCreateJob('process')}
+                disabled={loading}
+                className="px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="text-sm font-medium">Process</div>
+                <div className="text-xs opacity-75 mt-1">Run analysis</div>
+              </button>
+              <button
+                onClick={() => handleCreateJob('catalog')}
+                disabled={loading}
+                className="px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="text-sm font-medium">Catalog</div>
+                <div className="text-xs opacity-75 mt-1">List products</div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+          {service?.name} Service
+        </h2>
+
+        <div className="text-gray-600 dark:text-gray-400">
+          <p className="mb-4">
+            {service?.description}
+          </p>
+
+          <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <div className="flex items-start gap-3">
+              <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <div className="font-medium text-blue-900 dark:text-blue-100">
+                  Service Coming Soon
+                </div>
+                <div className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                  This service panel is under development. Use the Job Console to create and monitor processing tasks.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const getColorClass = (color: string, type: 'bg' | 'text' | 'border') => {
     const colors: Record<string, Record<string, string>> = {
@@ -135,15 +305,15 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
             {/* System Status */}
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${systemStatus.api === 'healthy' ? 'bg-green-500' : 'bg-red-500'}`} />
+                <div className={`w-2 h-2 rounded-full ${systemStatus.api === 'healthy' ? 'bg-green-500' : systemStatus.api === 'unhealthy' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'}`} />
                 <span className="text-sm text-gray-600 dark:text-gray-300">API</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${systemStatus.database === 'healthy' ? 'bg-green-500' : 'bg-red-500'}`} />
+                <div className={`w-2 h-2 rounded-full ${systemStatus.database === 'healthy' ? 'bg-green-500' : systemStatus.database === 'unhealthy' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'}`} />
                 <span className="text-sm text-gray-600 dark:text-gray-300">Database</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${systemStatus.celery === 'healthy' ? 'bg-green-500' : 'bg-red-500'}`} />
+                <div className={`w-2 h-2 rounded-full ${systemStatus.celery === 'healthy' ? 'bg-green-500' : systemStatus.celery === 'unhealthy' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'}`} />
                 <span className="text-sm text-gray-600 dark:text-gray-300">Workers</span>
               </div>
             </div>
@@ -172,7 +342,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
                   `}
                 >
                   <Icon
-                    className={`w-5 h-5 mt-0.5 ${isActive ? getColorClass(service.color, 'text') : 'text-gray-400'}`}
+                    className={`w-5 h-5 mt-0.5 flex-shrink-0 ${isActive ? getColorClass(service.color, 'text') : 'text-gray-400'}`}
                   />
                   <div className="flex-1 text-left">
                     <div className={`font-medium ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}`}>
@@ -180,15 +350,6 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                       {service.description}
-                    </div>
-                    <div className="flex items-center gap-2 mt-2 text-xs">
-                      <span className={`${getColorClass(service.color, 'text')} font-medium`}>
-                        {service.stats.active} active
-                      </span>
-                      <span className="text-gray-400">•</span>
-                      <span className="text-gray-500">
-                        {service.stats.total} total
-                      </span>
                     </div>
                   </div>
                 </button>
@@ -200,84 +361,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
           <div className="p-6">
-            {/* Panel Content */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                {services.find(s => s.id === activePanel)?.name} Service
-              </h2>
-
-              {/* Placeholder for service-specific content */}
-              <div className="text-gray-600 dark:text-gray-400">
-                <p className="mb-4">
-                  {services.find(s => s.id === activePanel)?.description}
-                </p>
-
-                {/* Quick Stats Grid */}
-                <div className="grid grid-cols-4 gap-4 mt-6">
-                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
-                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                      {services.find(s => s.id === activePanel)?.stats.active}
-                    </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      Active Operations
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
-                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                      {services.find(s => s.id === activePanel)?.stats.total}
-                    </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      Total Jobs
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
-                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                      98%
-                    </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      Success Rate
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
-                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                      2.3s
-                    </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      Avg Response
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-3 mt-6">
-                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                    New Operation
-                  </button>
-                  <button className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
-                    View History
-                  </button>
-                  <button className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
-                    Settings
-                  </button>
-                </div>
-
-                {/* Info Box */}
-                <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-                    <div>
-                      <div className="font-medium text-blue-900 dark:text-blue-100">
-                        Service Integration Complete
-                      </div>
-                      <div className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                        This service is fully integrated with all backend endpoints and ready for production use.
-                        All operations are logged for compliance and audit purposes.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {renderServiceContent()}
           </div>
         </main>
       </div>

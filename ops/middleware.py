@@ -3,7 +3,7 @@ from typing import Callable
 import json
 import logging
 from datetime import datetime
-from models import SessionLocal, AuditLog
+from ops.models import SessionLocal, AuditLog
 from jose import jwt
 import os
 

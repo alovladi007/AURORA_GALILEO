@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useState } from 'react';
 
 // Dynamically import GlobeViewer to avoid SSR issues with Cesium
@@ -32,9 +33,20 @@ export default function Home() {
                 <p className="text-xs text-gray-300">Mission Control Dashboard</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-900/30 rounded-full border border-green-700/50">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-sm text-green-400">System Online</span>
+            <div className="flex items-center gap-4">
+              <Link
+                href="/dashboard"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                </svg>
+                Mission Dashboard
+              </Link>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-900/30 rounded-full border border-green-700/50">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-sm text-green-400">System Online</span>
+              </div>
             </div>
           </div>
         </div>
@@ -70,7 +82,7 @@ export default function Home() {
         </div>
         <div className="mt-3 flex gap-2">
           <a
-            href="/docs"
+            href="http://localhost:4001/docs"
             target="_blank"
             className="flex-1 text-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
           >

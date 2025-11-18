@@ -9,8 +9,8 @@ from typing import Dict, Any, List
 import json
 from sqlalchemy.orm import Session
 
-from models import SessionLocal, ProcessingJob, SatelliteObservation, GravityProduct, BaselineVector
-from minio_client import get_minio_client, upload_to_minio, download_from_minio
+from ops.models import SessionLocal, ProcessingJob, SatelliteObservation, GravityProduct, BaselineVector
+from ops.minio_client import get_minio_client, upload_to_minio, download_from_minio
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

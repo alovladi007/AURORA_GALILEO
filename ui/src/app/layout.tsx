@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { Providers } from './providers';
+import { Toaster } from 'react-hot-toast';
 
 export const metadata: Metadata = {
   title: 'GeoSense Platform - Mission Control',
@@ -13,7 +15,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Providers>
+          {children}
+          <Toaster position="top-right" />
+        </Providers>
+      </body>
     </html>
   );
 }

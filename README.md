@@ -113,11 +113,36 @@ pip install -e ".[dev,ml,control]"
 
 ## 🌐 Run on Localhost
 
-The platform consists of two components:
-1. **FastAPI Backend** (port 5050) - Simulation, computation, and data API
-2. **Next.js Frontend** (port 3000) - 3D visualization with CesiumJS
+The platform offers two deployment options:
 
-### Step 1: Start the FastAPI Backend
+### Option 1: Docker Deployment (Recommended)
+
+The fastest way to get started with the complete platform:
+
+```bash
+# Start all services with Docker Compose
+docker-compose up -d
+
+# Services will be available at:
+# - Mission Dashboard: http://localhost:3002/dashboard
+# - ops-api (Jobs): http://localhost:4001/docs
+# - Main API: http://localhost:5050/docs
+# - Grafana Monitoring: http://localhost:3003
+# - Prometheus: http://localhost:9090
+```
+
+**Mission Control Dashboard** (http://localhost:3002/dashboard):
+- ✅ Real-time system health monitoring
+- ✅ Job creation and management (Plan, Ingest, Process, Catalog)
+- ✅ Active job console with auto-refresh
+- ✅ Service navigation panel
+- ✅ Dark mode support
+
+### Option 2: Manual Development Setup
+
+For development with hot-reload:
+
+#### Step 1: Start the FastAPI Backend
 
 ```bash
 # Quick start - run the startup script
@@ -131,7 +156,7 @@ Backend endpoints:
 - **API Documentation**: http://localhost:5050/docs (Interactive Swagger UI)
 - **Health Check**: http://localhost:5050/health
 
-### Step 2: Start the Next.js UI
+#### Step 2: Start the Next.js UI
 
 ```bash
 # Navigate to UI folder
@@ -140,7 +165,7 @@ cd ui
 # Install dependencies (first time only)
 npm install
 
-# Set up Cesium Ion token (required for 3D globe)
+# Set up environment variables
 cp .env.local.example .env.local
 # Edit .env.local and add your Cesium Ion token from https://ion.cesium.com/
 
@@ -149,8 +174,8 @@ npm run dev
 ```
 
 Frontend:
-- **3D Dashboard**: http://localhost:3001 (or http://localhost:3000)
-- **Features**: Real-time orbit visualization, gravity anomaly mapping, mission dashboard
+- **Mission Dashboard**: http://localhost:3002/dashboard
+- **Features**: Real-time orbit visualization, gravity anomaly mapping, job management
 
 ---
 
@@ -532,30 +557,54 @@ python security_scan.py                  # Automated security analysis
 
 ## 🐳 Docker Deployment
 
-Complete Docker Compose setup for production:
+Complete Docker Compose setup for production deployment:
 
 ```bash
 # Start all services
 docker-compose up -d
 
-# Services:
-# - api:        FastAPI backend (port 8000)
-# - worker:     Celery task queue
-# - ui:         Next.js frontend (port 3000)
-# - redis:      Cache & message broker
-# - postgres:   Metadata storage
-# - timescale:  Time-series telemetry
-# - minio:      Object storage
-# - grafana:    Monitoring dashboard (port 3001)
-# - prometheus: Metrics collection (port 9090)
-# - jaeger:     Distributed tracing (port 16686)
+# Core Services:
+# - ui:          Next.js frontend (port 3002) - Mission Dashboard
+# - api:         FastAPI simulation API (port 5050)
+# - ops-api:     FastAPI operations API (port 4001) - Job management
+# - worker:      Celery task queue workers
+# - beat:        Celery scheduled tasks
+# - flower:      Celery monitoring (port 5555)
+
+# Data Infrastructure:
+# - postgres:    PostgreSQL + TimescaleDB (port 5432)
+# - redis:       Cache & message broker (port 6380)
+# - minio:       S3-compatible object storage (API: 9002, Console: 9003)
+
+# Monitoring & Observability:
+# - grafana:     Monitoring dashboards (port 3003)
+# - prometheus:  Metrics collection (port 9090)
+# - jaeger:      Distributed tracing (port 16686)
 
 # View logs
-docker-compose logs -f api
+docker-compose logs -f ui           # Frontend logs
+docker-compose logs -f ops-api      # Operations API logs
+docker-compose logs -f worker       # Worker logs
+
+# Check service health
+docker-compose ps
 
 # Stop all services
 docker-compose down
+
+# Stop and remove volumes (clean slate)
+docker-compose down -v
 ```
+
+**Access Points:**
+- **Mission Dashboard**: http://localhost:3002/dashboard - Main control interface
+- **ops-api Docs**: http://localhost:4001/docs - Job management API
+- **Main API Docs**: http://localhost:5050/docs - Simulation & ML API
+- **Grafana**: http://localhost:3003 - Monitoring (admin/galileo_admin)
+- **MinIO Console**: http://localhost:9003 - Object storage UI
+- **Flower**: http://localhost:5555 - Celery task monitoring
+- **Prometheus**: http://localhost:9090 - Metrics
+- **Jaeger**: http://localhost:16686 - Distributed tracing
 
 ---
 
@@ -719,8 +768,22 @@ For security issues: See [LEGAL.md](LEGAL.md) for contact information.
 
 **Built with ❤️ for Space Science**
 
-**Status**: ✅ Production Ready | **Version**: 2.0 | **Sessions**: 13/13 Complete
+**Status**: ✅ Production Ready | **Version**: 2.0 | **Sessions**: 14/14 Complete
+
+✨ **Latest Update**: Mission Control Dashboard fully operational with real-time job management, system health monitoring, and Docker deployment
 
 [Documentation](docs/) · [Report Bug](https://github.com/alovladi007/GALILEO-V2.0/issues) · [Request Feature](https://github.com/alovladi007/GALILEO-V2.0/issues)
 
 </div>
+
+---
+
+## 🔄 Recent Updates
+
+**Latest Deployment (November 2024)**:
+- ✅ Mission Control Dashboard at `/dashboard` with full job management
+- ✅ Fixed ops-api health check (SQLAlchemy 2.0 compatibility)
+- ✅ Resolved authentication bypass for development mode
+- ✅ Updated UI environment configuration for correct API endpoints
+- ✅ All Docker services healthy and operational
+- ✅ Real-time system health monitoring with auto-refresh

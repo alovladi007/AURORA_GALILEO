@@ -7,9 +7,9 @@ import json
 import os
 
 # Import app and models
-from main import app, get_db
-from models import Base, User, ProcessingJob
-from schemas import UserCreate, PlanRequest, IngestRequest, ProcessRequest, CatalogRequest
+from ops.main import app, get_db
+from ops.models import Base, User, ProcessingJob
+from ops.schemas import UserCreate, PlanRequest, IngestRequest, ProcessRequest, CatalogRequest
 
 # Test database
 TEST_DATABASE_URL = "sqlite:///./test.db"
