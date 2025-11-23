@@ -27,6 +27,13 @@ from .inversion import (
     JointInversionNN,
 )
 
+from .models_3d import (
+    Gravity3DPINN,
+    UNet3D,
+    Volumetric3DInversion,
+    MultiScale3DInversion,
+)
+
 __all__ = [
     # PINNs
     'PhysicsInformedNN',
@@ -49,4 +56,9 @@ __all__ = [
     'GravityInversionNN',
     'MagneticInversionNN',
     'JointInversionNN',
+    # 3D Models
+    'Gravity3DPINN',
+    'UNet3D',
+    'Volumetric3DInversion',
+    'MultiScale3DInversion',
 ]
