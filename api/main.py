@@ -1,5 +1,7 @@
 """
-FastAPI application for GeoSense Platform.
+FastAPI application for GALILEO Platform.
+
+Geospatial Analytics, Learning, and Intelligence for Land, Environment & Oceanography
 
 Provides REST API endpoints for:
 - Orbit propagation
@@ -28,7 +30,7 @@ from slowapi.errors import RateLimitExceeded
 # Import authentication
 from api.auth import get_current_user, get_current_active_user
 
-# Import GeoSense modules (optional - gracefully degrade if not available)
+# Import GALILEO modules (optional - gracefully degrade if not available)
 try:
     import jax.numpy as jnp
     import numpy as np
@@ -50,8 +52,8 @@ except ImportError as e:
 limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
-    title="GeoSense Platform API",
-    description="AI-enhanced space-based geophysical sensing platform",
+    title="GALILEO Platform API",
+    description="Geospatial Analytics, Learning, and Intelligence for Land, Environment & Oceanography - AI-Enhanced Space-Based Earth Observation",
     version="0.4.0"
 )
 
@@ -60,7 +62,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS Configuration - secure by default
-CORS_ORIGINS_STR = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")
+CORS_ORIGINS_STR = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002")
 CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_STR.split(",") if origin.strip()]
 
 app.add_middleware(

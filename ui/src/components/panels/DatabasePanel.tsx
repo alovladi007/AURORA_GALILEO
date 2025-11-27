@@ -82,8 +82,8 @@ export function DatabasePanel() {
         ])
       } else if (activeTab === 'users') {
         setUsers([
-          { id: '1', username: 'admin', email: 'admin@geosense.io', role: 'admin', created_at: '2024-01-01T00:00:00Z', last_login: '2024-01-15T09:00:00Z' },
-          { id: '2', username: 'operator', email: 'operator@geosense.io', role: 'operator', created_at: '2024-01-05T00:00:00Z', last_login: '2024-01-15T08:30:00Z' },
+          { id: '1', username: 'admin', email: 'admin@galileo.space', role: 'admin', created_at: '2024-01-01T00:00:00Z', last_login: '2024-01-15T09:00:00Z' },
+          { id: '2', username: 'operator', email: 'operator@galileo.space', role: 'operator', created_at: '2024-01-05T00:00:00Z', last_login: '2024-01-15T08:30:00Z' },
         ])
       }
     } finally {

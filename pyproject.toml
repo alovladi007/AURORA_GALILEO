@@ -3,14 +3,14 @@ requires = ["setuptools>=65.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "geosense-platform"
+name = "galileo-platform"
 version = "0.6.0"
-description = "AI-enhanced space-based geophysical sensing platform with geophysical inversion engine and physics-informed ML acceleration"
+description = "GALILEO - Geospatial Analytics, Learning, and Intelligence for Land, Environment & Oceanography. AI-Enhanced Space-Based Earth Observation Platform."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Proprietary - Research Use Only"}
 authors = [
-    {name = "GeoSense Team"}
+    {name = "GALILEO Team"}
 ]
 
 dependencies = [

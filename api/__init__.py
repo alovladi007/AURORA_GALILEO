@@ -1,5 +1,7 @@
 """
-GeoSense Platform REST API.
+GALILEO Platform REST API.
+
+Geospatial Analytics, Learning, and Intelligence for Land, Environment & Oceanography
 
 FastAPI application providing HTTP endpoints for:
 - Orbit propagation

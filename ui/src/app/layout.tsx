@@ -4,8 +4,8 @@ import { Providers } from './providers';
 import { Toaster } from 'react-hot-toast';
 
 export const metadata: Metadata = {
-  title: 'GeoSense Platform - Mission Control',
-  description: 'AI-Enhanced Space-Based Geophysical Sensing Platform',
+  title: 'GALILEO - Mission Control',
+  description: 'Geospatial Analytics, Learning, and Intelligence for Land, Environment & Oceanography',
 };
 
 export default function RootLayout({

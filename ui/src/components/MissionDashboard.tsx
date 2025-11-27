@@ -3,7 +3,8 @@
 /**
  * Mission Control Dashboard
  *
- * Unified control panel for GeoSense Platform operations.
+ * Unified control panel for GALILEO Platform operations.
+ * Geospatial Analytics, Learning, and Intelligence for Land, Environment & Oceanography
  * Integrates all 11 services for comprehensive mission management.
  */
 
@@ -349,10 +350,10 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                GeoSense Mission Control
+                GALILEO Mission Control
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Unified platform for satellite gravity field mapping
+                Geospatial Analytics, Learning, and Intelligence for Land, Environment & Oceanography
               </p>
             </div>
 

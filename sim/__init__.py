@@ -1,5 +1,7 @@
 """
-GeoSense Simulation Package
+GALILEO Simulation Package
+
+Geospatial Analytics, Learning, and Intelligence for Land, Environment & Oceanography
 
 This package contains simulation modules for orbital dynamics and gravity field modeling.
 """

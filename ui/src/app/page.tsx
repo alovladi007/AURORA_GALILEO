@@ -30,8 +30,8 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <span className="text-3xl">🛰️</span>
               <div>
-                <h1 className="text-xl font-bold text-white">GeoSense Platform</h1>
-                <p className="text-xs text-gray-300">Mission Control Dashboard</p>
+                <h1 className="text-xl font-bold text-white">GALILEO</h1>
+                <p className="text-xs text-gray-300">Geospatial Analytics & Intelligence</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -64,9 +64,12 @@ export default function Home() {
           <div className="flex flex-col items-center justify-center h-full bg-gradient-to-b from-gray-900 via-blue-900/20 to-gray-900">
             <div className="text-center max-w-2xl px-4">
               <div className="text-8xl mb-6">🛰️</div>
-              <h2 className="text-4xl font-bold text-white mb-4">GeoSense Platform</h2>
-              <p className="text-xl text-gray-300 mb-8">
-                AI-Enhanced Space-Based Geophysical Sensing Platform for Next-Generation Gravity Field Mapping
+              <h2 className="text-4xl font-bold text-white mb-4">GALILEO</h2>
+              <p className="text-lg text-gray-300 mb-2">
+                Geospatial Analytics, Learning, and Intelligence for Land, Environment & Oceanography
+              </p>
+              <p className="text-md text-gray-400 mb-8">
+                AI-Enhanced Space-Based Platform for Next-Generation Earth Observation
               </p>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

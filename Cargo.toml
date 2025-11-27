@@ -8,9 +8,9 @@ resolver = "2"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.70"
-authors = ["GeoSense Team <team@geosense.example>"]
+authors = ["GALILEO Team <team@galileo.space>"]
 license = "Proprietary"
-repository = "https://github.com/geosense/geosense-platform"
+repository = "https://github.com/alovladi007/GALILEO-V2.0"
 
 [workspace.dependencies]
 # Async runtime

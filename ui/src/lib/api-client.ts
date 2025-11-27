@@ -2,8 +2,8 @@ import axios from 'axios'
 import { getSession } from 'next-auth/react'
 
 // Use environment variable with correct default port for main API
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4001'
-const OPS_API_URL = process.env.NEXT_PUBLIC_OPS_API_URL || 'http://localhost:4001'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050'
+const OPS_API_URL = process.env.NEXT_PUBLIC_OPS_API_URL || 'http://localhost:5050'
 
 export const apiClient = axios.create({
   baseURL: API_URL,

@@ -118,14 +118,32 @@ class ComplianceService:
         if not COMPLIANCE_IMPORTS_AVAILABLE:
             raise RuntimeError("Compliance modules not available")
 
-        events = self.audit_logger.query(
+        # Convert string event_type to enum if provided
+        event_type_enum = None
+        if event_type:
+            try:
+                event_type_enum = AuditEventType[event_type.upper().replace('.', '_')]
+            except KeyError:
+                pass
+
+        # Convert string severity to enum if provided
+        severity_enum = None
+        if severity:
+            try:
+                severity_enum = AuditSeverity[severity.upper()]
+            except KeyError:
+                pass
+
+        events = self.audit_logger.query_events(
             start_time=start_time,
             end_time=end_time,
             user_id=user_id,
-            event_type=event_type,
-            severity=severity,
-            limit=limit
+            event_type=event_type_enum,
+            severity=severity_enum,
         )
+
+        # Apply limit
+        events = events[:limit]
 
         return {
             'events': [e.to_dict() for e in events],

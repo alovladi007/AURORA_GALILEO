@@ -1,4 +1,6 @@
-# GALILEO V2.0 - GeoSense Platform
+# GALILEO V2.0
+
+**Geospatial Analytics, Learning, and Intelligence for Land, Environment & Oceanography**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Proprietary-red.svg)](LICENSE)
@@ -13,7 +15,7 @@ A comprehensive, production-ready orbital dynamics, guidance/navigation/control,
 
 ## 🎯 Overview
 
-GALILEO V2.0 (GeoSense Platform) is a complete end-to-end solution for space-based gravity field measurement and analysis, integrating:
+GALILEO V2.0 is a complete end-to-end solution for space-based gravity field measurement and analysis, integrating:
 
 ### Core Capabilities
 
