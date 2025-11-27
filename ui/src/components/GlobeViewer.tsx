@@ -157,6 +157,17 @@ export default function GlobeViewer({
           );
           viewer.imageryLayers.addImageryProvider(esriProvider);
           console.log('[GlobeViewer] Using ESRI World Imagery (high resolution)');
+
+          // Add street/place labels overlay on top of satellite imagery
+          try {
+            const labelsProvider = await Cesium.ArcGisMapServerImageryProvider.fromUrl(
+              'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer'
+            );
+            viewer.imageryLayers.addImageryProvider(labelsProvider);
+            console.log('[GlobeViewer] Added street labels overlay');
+          } catch (labelError) {
+            console.warn('[GlobeViewer] Could not add labels overlay');
+          }
         } catch (esriError) {
           console.warn('[GlobeViewer] ESRI failed, trying OpenStreetMap...');
           try {
@@ -180,6 +191,18 @@ export default function GlobeViewer({
             }
           }
         }
+
+        // Add 3D buildings from OpenStreetMap
+        try {
+          const osmBuildings = await Cesium.createOsmBuildingsAsync();
+          viewer.scene.primitives.add(osmBuildings);
+          console.log('[GlobeViewer] Added 3D OSM Buildings');
+        } catch (buildingError) {
+          console.warn('[GlobeViewer] Could not add 3D buildings:', buildingError);
+        }
+
+        // Enable depth testing for better 3D rendering
+        viewer.scene.globe.depthTestAgainstTerrain = true;
 
         console.log('[GlobeViewer] ✅ Cesium Viewer created successfully!');
         console.log('[GlobeViewer] Viewer object:', viewer);
