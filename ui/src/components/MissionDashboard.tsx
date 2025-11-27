@@ -10,11 +10,22 @@
 import React, { useState, useEffect } from 'react'
 import {
   Activity, Satellite, Zap, Database, Settings,
-  PlayCircle, BarChart3, Shield, Cpu, RefreshCw
+  PlayCircle, BarChart3, Shield, Cpu, RefreshCw, TrendingUp
 } from 'lucide-react'
 import { JobConsole } from './JobConsole'
 import { api } from '@/lib/api-client'
 import toast from 'react-hot-toast'
+
+// Import panel components
+import {
+  SimulationPanel,
+  InversionPanel,
+  MLPanel,
+  ControlPanel,
+  EmulatorPanel,
+  TradeStudyPanel,
+  TasksPanel
+} from './panels'
 
 interface DashboardProps {
   className?: string
@@ -29,6 +40,7 @@ type ServicePanel =
   | 'ml'
   | 'workflow'
   | 'tasks'
+  | 'trade-study'
   | 'database'
 
 export function MissionDashboard({ className = '' }: DashboardProps) {
@@ -84,7 +96,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: Satellite,
       color: 'blue',
       description: 'Orbit propagation & measurements',
-      showComponent: false
+      showComponent: true
     },
     {
       id: 'inversion' as ServicePanel,
@@ -92,7 +104,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: BarChart3,
       color: 'green',
       description: 'Gravity field estimation',
-      showComponent: false
+      showComponent: true
     },
     {
       id: 'control' as ServicePanel,
@@ -100,7 +112,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: Settings,
       color: 'purple',
       description: 'Formation control & maneuvers',
-      showComponent: false
+      showComponent: true
     },
     {
       id: 'emulator' as ServicePanel,
@@ -108,7 +120,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: Activity,
       color: 'orange',
       description: 'Real-time signal emulation',
-      showComponent: false
+      showComponent: true
     },
     {
       id: 'ml' as ServicePanel,
@@ -116,7 +128,23 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: Cpu,
       color: 'pink',
       description: 'PINN & U-Net training',
-      showComponent: false
+      showComponent: true
+    },
+    {
+      id: 'trade-study' as ServicePanel,
+      name: 'Trade Study',
+      icon: TrendingUp,
+      color: 'cyan',
+      description: 'Pareto analysis & optimization',
+      showComponent: true
+    },
+    {
+      id: 'tasks' as ServicePanel,
+      name: 'Tasks',
+      icon: Zap,
+      color: 'yellow',
+      description: 'Celery task queue',
+      showComponent: true
     },
     {
       id: 'workflow' as ServicePanel,
@@ -124,14 +152,6 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: PlayCircle,
       color: 'indigo',
       description: 'End-to-end pipelines',
-      showComponent: false
-    },
-    {
-      id: 'tasks' as ServicePanel,
-      name: 'Tasks',
-      icon: Zap,
-      color: 'yellow',
-      description: 'Async task queue',
       showComponent: false
     },
     {
@@ -178,99 +198,124 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
   const renderServiceContent = () => {
     const service = services.find(s => s.id === activePanel)
 
-    if (service?.showComponent && activePanel === 'jobs') {
-      return (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Job Console
-              </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Monitor and manage processing jobs
-              </p>
-            </div>
-            <button
-              onClick={checkSystemHealth}
-              className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
-              title="Refresh system status"
-            >
-              <RefreshCw className="w-5 h-5" />
-            </button>
-          </div>
-
-          <JobConsole />
-
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Create New Job
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <button
-                onClick={() => handleCreateJob('plan')}
-                disabled={loading}
-                className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <div className="text-sm font-medium">Mission Plan</div>
-                <div className="text-xs opacity-75 mt-1">Orbit design</div>
-              </button>
-              <button
-                onClick={() => handleCreateJob('ingest')}
-                disabled={loading}
-                className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <div className="text-sm font-medium">Data Ingest</div>
-                <div className="text-xs opacity-75 mt-1">Import data</div>
-              </button>
-              <button
-                onClick={() => handleCreateJob('process')}
-                disabled={loading}
-                className="px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <div className="text-sm font-medium">Process</div>
-                <div className="text-xs opacity-75 mt-1">Run analysis</div>
-              </button>
-              <button
-                onClick={() => handleCreateJob('catalog')}
-                disabled={loading}
-                className="px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <div className="text-sm font-medium">Catalog</div>
-                <div className="text-xs opacity-75 mt-1">List products</div>
-              </button>
-            </div>
-          </div>
-        </div>
-      )
-    }
-
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-          {service?.name} Service
-        </h2>
-
-        <div className="text-gray-600 dark:text-gray-400">
-          <p className="mb-4">
-            {service?.description}
-          </p>
-
-          <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-            <div className="flex items-start gap-3">
-              <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+    // Render actual panel components based on active panel
+    switch (activePanel) {
+      case 'jobs':
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
               <div>
-                <div className="font-medium text-blue-900 dark:text-blue-100">
-                  Service Coming Soon
-                </div>
-                <div className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                  This service panel is under development. Use the Job Console to create and monitor processing tasks.
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Job Console
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Monitor and manage processing jobs
+                </p>
+              </div>
+              <button
+                onClick={checkSystemHealth}
+                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                title="Refresh system status"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+            </div>
+
+            <JobConsole />
+
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Create New Job
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <button
+                  onClick={() => handleCreateJob('plan')}
+                  disabled={loading}
+                  className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-sm font-medium">Mission Plan</div>
+                  <div className="text-xs opacity-75 mt-1">Orbit design</div>
+                </button>
+                <button
+                  onClick={() => handleCreateJob('ingest')}
+                  disabled={loading}
+                  className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-sm font-medium">Data Ingest</div>
+                  <div className="text-xs opacity-75 mt-1">Import data</div>
+                </button>
+                <button
+                  onClick={() => handleCreateJob('process')}
+                  disabled={loading}
+                  className="px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-sm font-medium">Process</div>
+                  <div className="text-xs opacity-75 mt-1">Run analysis</div>
+                </button>
+                <button
+                  onClick={() => handleCreateJob('catalog')}
+                  disabled={loading}
+                  className="px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-sm font-medium">Catalog</div>
+                  <div className="text-xs opacity-75 mt-1">List products</div>
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'simulation':
+        return <SimulationPanel />
+
+      case 'inversion':
+        return <InversionPanel />
+
+      case 'control':
+        return <ControlPanel />
+
+      case 'emulator':
+        return <EmulatorPanel />
+
+      case 'ml':
+        return <MLPanel />
+
+      case 'trade-study':
+        return <TradeStudyPanel />
+
+      case 'tasks':
+        return <TasksPanel />
+
+      default:
+        // Fallback for panels not yet implemented (workflow, database)
+        return (
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+              {service?.name} Service
+            </h2>
+
+            <div className="text-gray-600 dark:text-gray-400">
+              <p className="mb-4">
+                {service?.description}
+              </p>
+
+              <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-medium text-blue-900 dark:text-blue-100">
+                      Service Coming Soon
+                    </div>
+                    <div className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                      This service panel is under development. Use the Job Console to create and monitor processing tasks.
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-    )
+        )
+    }
   }
 
   const getColorClass = (color: string, type: 'bg' | 'text' | 'border') => {
@@ -283,6 +328,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       indigo: { bg: 'bg-indigo-500', text: 'text-indigo-500', border: 'border-indigo-500' },
       yellow: { bg: 'bg-yellow-500', text: 'text-yellow-500', border: 'border-yellow-500' },
       teal: { bg: 'bg-teal-500', text: 'text-teal-500', border: 'border-teal-500' },
+      cyan: { bg: 'bg-cyan-500', text: 'text-cyan-500', border: 'border-cyan-500' },
     }
     return colors[color]?.[type] || ''
   }
