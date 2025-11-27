@@ -66,6 +66,12 @@ export default function GlobeViewer({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [animationIndex, setAnimationIndex] = useState(0);
+  const [clickedLocation, setClickedLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    altitude: number;
+    cartesian: { x: number; y: number; z: number };
+  } | null>(null);
 
   // Color palette for satellites
   const satelliteColors = [
@@ -126,7 +132,7 @@ export default function GlobeViewer({
 
         console.log('[GlobeViewer] About to create Cesium Viewer...');
 
-        // Create the Viewer with offline imagery configuration
+        // Create the Viewer with minimal configuration to avoid Ion token issues
         const viewer = new Cesium.Viewer(viewerContainerRef.current!, {
           animation: false,
           baseLayerPicker: false,
@@ -139,18 +145,97 @@ export default function GlobeViewer({
           timeline: false,
           navigationHelpButton: false,
           navigationInstructionsInitiallyVisible: false,
-          // Use offline Natural Earth II imagery - works without Ion token issues
-          baseLayer: Cesium.ImageryLayer.fromProviderAsync(
-            Cesium.TileMapServiceImageryProvider.fromUrl(
-              Cesium.buildModuleUrl("Assets/Textures/NaturalEarthII")
-            )
-          ),
+          imageryProvider: false as any, // Disable default imagery initially
+          terrain: undefined, // Disable terrain
         });
+
+        // Add high-resolution imagery layer
+        try {
+          // Try ESRI World Imagery first (high quality satellite imagery)
+          const esriProvider = await Cesium.ArcGisMapServerImageryProvider.fromUrl(
+            'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
+          );
+          viewer.imageryLayers.addImageryProvider(esriProvider);
+          console.log('[GlobeViewer] Using ESRI World Imagery (high resolution)');
+        } catch (esriError) {
+          console.warn('[GlobeViewer] ESRI failed, trying OpenStreetMap...');
+          try {
+            // Fallback to OpenStreetMap
+            const osmProvider = new Cesium.OpenStreetMapImageryProvider({
+              url: 'https://tile.openstreetmap.org/'
+            });
+            viewer.imageryLayers.addImageryProvider(osmProvider);
+            console.log('[GlobeViewer] Using OpenStreetMap');
+          } catch (osmError) {
+            console.warn('[GlobeViewer] OSM failed, using NaturalEarthII offline...');
+            try {
+              // Final fallback to offline NaturalEarthII
+              const naturalEarthProvider = await Cesium.TileMapServiceImageryProvider.fromUrl(
+                Cesium.buildModuleUrl("Assets/Textures/NaturalEarthII")
+              );
+              viewer.imageryLayers.addImageryProvider(naturalEarthProvider);
+            } catch (neError) {
+              // Ultimate fallback - solid color
+              viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#1e3a5f');
+            }
+          }
+        }
 
         console.log('[GlobeViewer] ✅ Cesium Viewer created successfully!');
         console.log('[GlobeViewer] Viewer object:', viewer);
 
         viewerRef.current = viewer;
+
+        // Add click handler for location pinpointing
+        const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+        handler.setInputAction((click: { position: Cesium.Cartesian2 }) => {
+          const cartesian = viewer.camera.pickEllipsoid(
+            click.position,
+            viewer.scene.globe.ellipsoid
+          );
+
+          if (cartesian) {
+            const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+            const longitude = Cesium.Math.toDegrees(cartographic.longitude);
+            const latitude = Cesium.Math.toDegrees(cartographic.latitude);
+            const altitude = cartographic.height;
+
+            setClickedLocation({
+              latitude,
+              longitude,
+              altitude,
+              cartesian: { x: cartesian.x, y: cartesian.y, z: cartesian.z },
+            });
+
+            // Add or update a marker at the clicked location
+            const existingMarker = viewer.entities.getById('clickedLocationMarker');
+            if (existingMarker) {
+              viewer.entities.remove(existingMarker);
+            }
+
+            viewer.entities.add({
+              id: 'clickedLocationMarker',
+              name: 'Selected Location',
+              position: cartesian,
+              point: {
+                pixelSize: 14,
+                color: Cesium.Color.RED,
+                outlineColor: Cesium.Color.WHITE,
+                outlineWidth: 2,
+              },
+              label: {
+                text: `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`,
+                font: '12px sans-serif',
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                outlineWidth: 2,
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                pixelOffset: new Cesium.Cartesian2(0, -20),
+                fillColor: Cesium.Color.WHITE,
+                outlineColor: Cesium.Color.BLACK,
+              },
+            });
+          }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
         // Add satellite positions if provided
         if (satellitePositions.length > 0) {
@@ -367,7 +452,51 @@ export default function GlobeViewer({
         </div>
       )}
 
-      {/* Info panel */}
+      {/* Location Info Panel */}
+      {clickedLocation && (
+        <div className="absolute top-4 left-4 bg-gray-800/95 backdrop-blur-sm p-4 rounded-lg shadow-xl border border-gray-700 min-w-[280px]">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-white flex items-center gap-2">
+              <span className="text-red-500">📍</span> Selected Location
+            </h3>
+            <button
+              onClick={() => setClickedLocation(null)}
+              className="text-gray-400 hover:text-white text-sm"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="text-sm space-y-2 text-gray-300">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-gray-900/50 p-2 rounded">
+                <div className="text-xs text-gray-500">Latitude</div>
+                <div className="font-mono text-green-400">
+                  {clickedLocation.latitude.toFixed(6)}°
+                </div>
+              </div>
+              <div className="bg-gray-900/50 p-2 rounded">
+                <div className="text-xs text-gray-500">Longitude</div>
+                <div className="font-mono text-blue-400">
+                  {clickedLocation.longitude.toFixed(6)}°
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-900/50 p-2 rounded">
+              <div className="text-xs text-gray-500">ECEF Cartesian (meters)</div>
+              <div className="font-mono text-xs text-yellow-400 mt-1">
+                X: {clickedLocation.cartesian.x.toFixed(2)}<br />
+                Y: {clickedLocation.cartesian.y.toFixed(2)}<br />
+                Z: {clickedLocation.cartesian.z.toFixed(2)}
+              </div>
+            </div>
+            <div className="text-xs text-gray-500 mt-2">
+              Click anywhere on the globe to select a new location
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gravity Measurement Info panel */}
       {selectedPoint !== null && gravityData[selectedPoint] && (
         <div className="absolute top-4 right-4 bg-white p-4 rounded-lg shadow-lg">
           <h3 className="font-bold mb-2">Gravity Measurement</h3>
@@ -385,6 +514,15 @@ export default function GlobeViewer({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Instructions overlay when no location selected */}
+      {!clickedLocation && !isLoading && !error && (
+        <div className="absolute bottom-4 left-4 bg-gray-800/80 backdrop-blur-sm px-4 py-2 rounded-lg border border-gray-700">
+          <p className="text-sm text-gray-300">
+            <span className="text-blue-400">Click</span> on the globe to pinpoint a location
+          </p>
         </div>
       )}
     </div>
