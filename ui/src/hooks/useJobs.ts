@@ -21,7 +21,8 @@ export function useJobs() {
     queryKey: ['jobs'],
     queryFn: async () => {
       const response = await apiClient.get('/ops/jobs')
-      return response.data
+      // API returns { jobs: [...] }, extract the array
+      return response.data.jobs || []
     },
     enabled: true, // Enable without auth for now
     refetchInterval: 5000, // Refresh every 5 seconds
