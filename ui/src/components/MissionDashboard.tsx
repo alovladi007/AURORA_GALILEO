@@ -24,7 +24,9 @@ import {
   ControlPanel,
   EmulatorPanel,
   TradeStudyPanel,
-  TasksPanel
+  TasksPanel,
+  WorkflowPanel,
+  DatabasePanel
 } from './panels'
 
 interface DashboardProps {
@@ -152,7 +154,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: PlayCircle,
       color: 'indigo',
       description: 'End-to-end pipelines',
-      showComponent: false
+      showComponent: true
     },
     {
       id: 'database' as ServicePanel,
@@ -160,7 +162,7 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
       icon: Database,
       color: 'teal',
       description: 'Data persistence',
-      showComponent: false
+      showComponent: true
     },
   ]
 
@@ -285,6 +287,12 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
 
       case 'tasks':
         return <TasksPanel />
+
+      case 'workflow':
+        return <WorkflowPanel />
+
+      case 'database':
+        return <DatabasePanel />
 
       default:
         // Fallback for panels not yet implemented (workflow, database)
