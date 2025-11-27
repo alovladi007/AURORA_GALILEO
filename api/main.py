@@ -9,14 +9,17 @@ Provides REST API endpoints for:
 - Platform status and documentation
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Request, Response
+from fastapi import FastAPI, HTTPException, Depends, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Set
 import os
 import time
+import asyncio
+import json
+from datetime import datetime
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -103,6 +106,134 @@ async def prometheus_middleware(request: Request, call_next):
     ).observe(duration)
 
     return response
+
+# ============================================================================
+# WebSocket Connection Manager
+# ============================================================================
+
+class ConnectionManager:
+    """Manages WebSocket connections for real-time updates."""
+
+    def __init__(self):
+        self.active_connections: Dict[str, Set[WebSocket]] = {
+            'tasks': set(),
+            'emulator': set(),
+            'simulation': set(),
+            'general': set(),
+        }
+
+    async def connect(self, websocket: WebSocket, channel: str = 'general'):
+        await websocket.accept()
+        if channel not in self.active_connections:
+            self.active_connections[channel] = set()
+        self.active_connections[channel].add(websocket)
+
+    def disconnect(self, websocket: WebSocket, channel: str = 'general'):
+        if channel in self.active_connections:
+            self.active_connections[channel].discard(websocket)
+
+    async def send_personal_message(self, message: dict, websocket: WebSocket):
+        await websocket.send_json(message)
+
+    async def broadcast(self, message: dict, channel: str = 'general'):
+        if channel in self.active_connections:
+            disconnected = set()
+            for connection in self.active_connections[channel]:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    disconnected.add(connection)
+            for conn in disconnected:
+                self.active_connections[channel].discard(conn)
+
+
+ws_manager = ConnectionManager()
+
+
+# ============================================================================
+# WebSocket Endpoints
+# ============================================================================
+
+@app.websocket("/ws")
+async def websocket_general(websocket: WebSocket):
+    """General purpose WebSocket endpoint."""
+    await ws_manager.connect(websocket, 'general')
+    try:
+        while True:
+            data = await websocket.receive_json()
+            response = {
+                'type': 'echo',
+                'data': data,
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            await ws_manager.send_personal_message(response, websocket)
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, 'general')
+
+
+@app.websocket("/ws/tasks")
+async def websocket_tasks(websocket: WebSocket):
+    """WebSocket endpoint for task status updates."""
+    await ws_manager.connect(websocket, 'tasks')
+    try:
+        await ws_manager.send_personal_message({
+            'type': 'connected',
+            'channel': 'tasks',
+            'timestamp': datetime.utcnow().isoformat()
+        }, websocket)
+        while True:
+            data = await websocket.receive_json()
+            if data.get('action') == 'list':
+                await ws_manager.send_personal_message({
+                    'type': 'task_list',
+                    'data': {'active_tasks': []},
+                    'timestamp': datetime.utcnow().isoformat()
+                }, websocket)
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, 'tasks')
+
+
+@app.websocket("/ws/emulator/{emulator_id}")
+async def websocket_emulator(websocket: WebSocket, emulator_id: str = 'default'):
+    """WebSocket endpoint for emulator signal streaming."""
+    await ws_manager.connect(websocket, 'emulator')
+    streaming = False
+    try:
+        while True:
+            try:
+                data = await asyncio.wait_for(websocket.receive_json(), timeout=0.1)
+                if data.get('action') == 'start_stream':
+                    streaming = True
+                elif data.get('action') == 'stop_stream':
+                    streaming = False
+            except asyncio.TimeoutError:
+                pass
+            if streaming:
+                await ws_manager.send_personal_message({
+                    'type': 'emulator_data',
+                    'emulator_id': emulator_id,
+                    'timestamp': datetime.utcnow().isoformat()
+                }, websocket)
+            await asyncio.sleep(0.1)
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, 'emulator')
+
+
+@app.websocket("/ws/simulation")
+async def websocket_simulation(websocket: WebSocket):
+    """WebSocket endpoint for simulation progress."""
+    await ws_manager.connect(websocket, 'simulation')
+    try:
+        while True:
+            data = await websocket.receive_json()
+            await ws_manager.send_personal_message({
+                'type': 'simulation_ack',
+                'data': data,
+                'timestamp': datetime.utcnow().isoformat()
+            }, websocket)
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, 'simulation')
+
 
 # ============================================================================
 # Request/Response Models
