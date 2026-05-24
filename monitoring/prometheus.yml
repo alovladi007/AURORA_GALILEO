@@ -7,16 +7,17 @@ global:
     monitor: 'galileo-monitor'
     environment: 'production'
 
-# Alertmanager configuration (optional)
-# alerting:
-#   alertmanagers:
-#     - static_configs:
-#         - targets:
-#           - alertmanager:9093
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+      timeout: 10s
 
 # Load rules once and periodically evaluate them
 rule_files:
-  # - "alerts/*.yml"
+  - "/etc/prometheus/alert-rules.yml"
 
 # Scrape configurations
 scrape_configs:

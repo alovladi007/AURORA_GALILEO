@@ -21,11 +21,20 @@ import os
 import time
 import asyncio
 import json
+import uuid
+import logging
 from datetime import datetime
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(message)s',
+)
+logger = logging.getLogger(__name__)
 
 # Import authentication
 from api.auth import get_current_user, get_current_active_user
@@ -158,6 +167,95 @@ async def security_headers_middleware(request: Request, call_next):
     )
 
     return response
+
+
+# ============================================================================
+# Request Timeout Middleware
+# ============================================================================
+
+REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "30"))
+
+@app.middleware("http")
+async def timeout_middleware(request: Request, call_next):
+    """Add request timeout to prevent hanging requests"""
+    try:
+        response = await asyncio.wait_for(
+            call_next(request),
+            timeout=REQUEST_TIMEOUT_SECONDS
+        )
+        return response
+    except asyncio.TimeoutError:
+        return JSONResponse(
+            status_code=504,
+            content={
+                "detail": f"Request timeout after {REQUEST_TIMEOUT_SECONDS} seconds",
+                "error": "gateway_timeout"
+            }
+        )
+
+
+# ============================================================================
+# Structured Logging with Correlation IDs
+# ============================================================================
+
+@app.middleware("http")
+async def logging_middleware(request: Request, call_next):
+    """Add structured logging with correlation IDs to all requests"""
+    # Generate or extract correlation ID
+    correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
+
+    # Start time for duration calculation
+    start_time = time.time()
+
+    # Log incoming request
+    log_data = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "correlation_id": correlation_id,
+        "event": "request_started",
+        "method": request.method,
+        "path": request.url.path,
+        "client_ip": request.client.host if request.client else "unknown",
+        "user_agent": request.headers.get("user-agent", "unknown"),
+    }
+    logger.info(json.dumps(log_data))
+
+    # Process request
+    try:
+        response = await call_next(request)
+        duration = time.time() - start_time
+
+        # Log successful response
+        log_data = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "correlation_id": correlation_id,
+            "event": "request_completed",
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": round(duration * 1000, 2),
+        }
+        logger.info(json.dumps(log_data))
+
+        # Add correlation ID to response headers
+        response.headers["X-Correlation-ID"] = correlation_id
+        return response
+
+    except Exception as e:
+        duration = time.time() - start_time
+
+        # Log error
+        log_data = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "correlation_id": correlation_id,
+            "event": "request_failed",
+            "method": request.method,
+            "path": request.url.path,
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "duration_ms": round(duration * 1000, 2),
+        }
+        logger.error(json.dumps(log_data))
+        raise
 
 
 # ============================================================================

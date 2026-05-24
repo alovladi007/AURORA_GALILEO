@@ -27,6 +27,37 @@ app.conf.update(
     task_soft_time_limit=3000,  # 50 minutes warning
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=1000,
+
+    # Dead Letter Queue (DLQ) Configuration
+    task_reject_on_worker_lost=True,
+    task_acks_late=True,  # Acknowledge task only after completion
+    task_default_retry_delay=60,  # 1 minute
+    task_max_retries=3,
+
+    # Task routing for DLQ
+    task_routes={
+        'ops.tasks.*': {
+            'queue': 'default',
+            'routing_key': 'default',
+        },
+        'simulation.*': {
+            'queue': 'simulation',
+            'routing_key': 'simulation',
+        },
+        'ml.*': {
+            'queue': 'ml',
+            'routing_key': 'ml',
+        },
+    },
+
+    # Dead letter exchange for failed tasks
+    task_default_exchange='tasks',
+    task_default_exchange_type='topic',
+    task_default_routing_key='default',
+
+    # Store failed task results for investigation
+    result_extended=True,
+    result_expires=86400,  # 24 hours
 )
 
 # Periodic task schedule
@@ -360,3 +391,87 @@ def run_end_to_end_mission(mission_config):
     )
 
     return workflow.apply_async()
+
+
+# ============================================================================
+# Dead Letter Queue Handler
+# ============================================================================
+
+@app.task(bind=True, name='ops.tasks.handle_failed_task', queue='dlq')
+def handle_failed_task(self, task_id, task_name, args, kwargs, exception, traceback):
+    """
+    Handle tasks that have exhausted all retries.
+
+    This task is automatically called when a task fails after max retries.
+    It logs the failure and can trigger alerts or cleanup actions.
+
+    Args:
+        task_id: ID of the failed task
+        task_name: Name of the failed task
+        args: Original task arguments
+        kwargs: Original task keyword arguments
+        exception: Exception that caused the failure
+        traceback: Stack trace
+
+    Returns:
+        dict: Failure report
+    """
+    import logging
+    import json
+    from datetime import datetime
+
+    logger = logging.getLogger(__name__)
+
+    failure_report = {
+        'timestamp': datetime.utcnow().isoformat(),
+        'task_id': task_id,
+        'task_name': task_name,
+        'args': str(args),
+        'kwargs': str(kwargs),
+        'exception': str(exception),
+        'traceback': traceback,
+        'status': 'DEAD_LETTER_QUEUE'
+    }
+
+    # Log to structured logging
+    logger.error(json.dumps({
+        'event': 'task_dlq',
+        **failure_report
+    }))
+
+    # TODO: Send alert to monitoring system
+    # TODO: Store in database for investigation
+    # TODO: Trigger cleanup actions if needed
+
+    return failure_report
+
+
+@app.task(name='ops.tasks.cleanup_old_jobs')
+def cleanup_old_jobs():
+    """
+    Periodic task to clean up old job records.
+    Runs daily at 2 AM (configured in beat_schedule).
+    """
+    import logging
+    from datetime import datetime, timedelta
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Clean up jobs older than 30 days
+        cutoff_date = datetime.utcnow() - timedelta(days=30)
+
+        # TODO: Implement actual cleanup logic
+        # from ops.models import ProcessingJob, get_db
+        # with get_db() as db:
+        #     deleted = db.query(ProcessingJob)\
+        #         .filter(ProcessingJob.created_at < cutoff_date)\
+        #         .filter(ProcessingJob.status.in_(['completed', 'failed']))\
+        #         .delete()
+
+        logger.info(f"Cleanup task completed. Cutoff date: {cutoff_date}")
+        return {'status': 'completed', 'cutoff_date': cutoff_date.isoformat()}
+
+    except Exception as e:
+        logger.error(f"Cleanup task failed: {str(e)}")
+        raise

@@ -1,0 +1,266 @@
+groups:
+  # ============================================================================
+  # SLO-Based Alerts (Service Level Objectives)
+  # ============================================================================
+
+  - name: slo_alerts
+    interval: 30s
+    rules:
+      # SLO: 99.9% Availability (43.2 minutes downtime/month)
+      - alert: AvailabilitySLOViolation
+        expr: |
+          (
+            sum(rate(galileo_api_requests_total{status=~"2..|3.."}[5m]))
+            /
+            sum(rate(galileo_api_requests_total[5m]))
+          ) < 0.999
+        for: 5m
+        labels:
+          severity: critical
+          category: api
+          slo: availability
+        annotations:
+          summary: "API availability below 99.9% SLO"
+          description: "API availability is {{ $value | humanizePercentage }}, below 99.9% SLO target"
+          runbook: "https://docs.galileo.com/runbooks/availability-slo"
+
+      # SLO: p99 Latency < 500ms
+      - alert: LatencySLOViolation
+        expr: |
+          histogram_quantile(0.99,
+            rate(galileo_api_request_duration_seconds_bucket[5m])
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: high
+          category: api
+          slo: latency
+        annotations:
+          summary: "API p99 latency above 500ms SLO"
+          description: "API p99 latency is {{ $value | humanizeDuration }}, exceeding 500ms SLO target"
+          runbook: "https://docs.galileo.com/runbooks/latency-slo"
+
+      # SLO: p95 Latency < 300ms
+      - alert: LatencyP95Warning
+        expr: |
+          histogram_quantile(0.95,
+            rate(galileo_api_request_duration_seconds_bucket[5m])
+          ) > 0.3
+        for: 10m
+        labels:
+          severity: warning
+          category: api
+          slo: latency
+        annotations:
+          summary: "API p95 latency elevated"
+          description: "API p95 latency is {{ $value | humanizeDuration }}, approaching SLO limits"
+
+      # Error Rate SLO: < 0.1% errors
+      - alert: ErrorRateSLOViolation
+        expr: |
+          (
+            sum(rate(galileo_api_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(galileo_api_requests_total[5m]))
+          ) > 0.001
+        for: 5m
+        labels:
+          severity: high
+          category: api
+          slo: error_rate
+        annotations:
+          summary: "API error rate above 0.1% SLO"
+          description: "API error rate is {{ $value | humanizePercentage }}, exceeding 0.1% SLO target"
+          runbook: "https://docs.galileo.com/runbooks/error-rate"
+
+  # ============================================================================
+  # Service Health Alerts
+  # ============================================================================
+
+  - name: service_health
+    interval: 30s
+    rules:
+      # API Service Down
+      - alert: APIServiceDown
+        expr: up{job="galileo-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: api
+        annotations:
+          summary: "API service is down"
+          description: "GALILEO API service on {{ $labels.instance }} has been down for more than 1 minute"
+          runbook: "https://docs.galileo.com/runbooks/api-down"
+
+      # High Error Rate
+      - alert: HighErrorRate
+        expr: |
+          rate(galileo_api_requests_total{status=~"5.."}[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+          category: api
+        annotations:
+          summary: "High API error rate detected"
+          description: "API is experiencing {{ $value | humanize }} errors/sec"
+          runbook: "https://docs.galileo.com/runbooks/high-errors"
+
+      # High Request Rate (potential DDoS)
+      - alert: AbnormallyHighTraffic
+        expr: |
+          rate(galileo_api_requests_total[1m]) > 1000
+        for: 3m
+        labels:
+          severity: warning
+          category: api
+        annotations:
+          summary: "Abnormally high traffic detected"
+          description: "API receiving {{ $value | humanize }} requests/sec (normal: ~100/sec)"
+          runbook: "https://docs.galileo.com/runbooks/high-traffic"
+
+  # ============================================================================
+  # Database Alerts
+  # ============================================================================
+
+  - name: database_alerts
+    interval: 30s
+    rules:
+      # Database Down
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "Database on {{ $labels.instance }} is unreachable"
+          runbook: "https://docs.galileo.com/runbooks/database-down"
+
+      # High Connection Usage
+      - alert: HighDatabaseConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "Database connection pool usage high"
+          description: "Database connections at {{ $value | humanizePercentage }} capacity"
+          runbook: "https://docs.galileo.com/runbooks/db-connections"
+
+      # Slow Queries
+      - alert: SlowDatabaseQueries
+        expr: rate(pg_stat_activity_max_tx_duration[5m]) > 30
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "Slow database queries detected"
+          description: "Database queries taking longer than normal"
+
+  # ============================================================================
+  # Infrastructure Alerts
+  # ============================================================================
+
+  - name: infrastructure
+    interval: 30s
+    rules:
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage on {{ $labels.instance }} is {{ $value }}%"
+
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage on {{ $labels.instance }} is {{ $value }}%"
+
+      # Disk Space Low
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 10
+        for: 5m
+        labels:
+          severity: critical
+          category: infrastructure
+        annotations:
+          summary: "Disk space critically low"
+          description: "Disk {{ $labels.device }} on {{ $labels.instance }} has only {{ $value }}% free"
+          runbook: "https://docs.galileo.com/runbooks/disk-space"
+
+  # ============================================================================
+  # Redis Alerts
+  # ============================================================================
+
+  - name: redis_alerts
+    interval: 30s
+    rules:
+      # Redis Down
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: cache
+        annotations:
+          summary: "Redis is down"
+          description: "Redis instance {{ $labels.instance }} is unreachable"
+          runbook: "https://docs.galileo.com/runbooks/redis-down"
+
+      # High Memory Usage
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          category: cache
+        annotations:
+          summary: "Redis memory usage high"
+          description: "Redis memory at {{ $value | humanizePercentage }} capacity"
+
+  # ============================================================================
+  # Celery Worker Alerts
+  # ============================================================================
+
+  - name: celery_alerts
+    interval: 30s
+    rules:
+      # No Workers Available
+      - alert: NoWorkersAvailable
+        expr: celery_workers_total == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: workers
+        annotations:
+          summary: "No Celery workers available"
+          description: "All Celery workers are down or disconnected"
+          runbook: "https://docs.galileo.com/runbooks/workers-down"
+
+      # High Task Queue Length
+      - alert: HighTaskQueueLength
+        expr: celery_queue_length > 1000
+        for: 10m
+        labels:
+          severity: warning
+          category: workers
+        annotations:
+          summary: "Celery task queue backlog"
+          description: "Task queue has {{ $value }} pending tasks"
+          runbook: "https://docs.galileo.com/runbooks/task-backlog"
