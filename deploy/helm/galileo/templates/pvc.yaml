@@ -1,0 +1,47 @@
+{{- if .Values.persistence.data.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-data
+  labels:
+    {{- include "galileo.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ .Values.persistence.data.size }}
+  storageClassName: {{ .Values.persistence.data.storageClass | default .Values.global.storageClass }}
+{{- end }}
+---
+{{- if .Values.persistence.checkpoints.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-checkpoints
+  labels:
+    {{- include "galileo.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ .Values.persistence.checkpoints.size }}
+  storageClassName: {{ .Values.persistence.checkpoints.storageClass | default .Values.global.storageClass }}
+{{- end }}
+---
+{{- if .Values.persistence.logs.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-logs
+  labels:
+    {{- include "galileo.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ .Values.persistence.logs.size }}
+  storageClassName: {{ .Values.persistence.logs.storageClass | default .Values.global.storageClass }}
+{{- end }}

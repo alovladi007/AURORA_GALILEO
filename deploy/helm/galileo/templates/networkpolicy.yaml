@@ -1,0 +1,103 @@
+{{- if .Values.networkPolicies.enabled -}}
+# Default deny all ingress and egress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "galileo.fullname" . }}-default-deny
+  labels:
+    {{- include "galileo.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    {{- toYaml .Values.networkPolicies.policyTypes | nindent 4 }}
+---
+# Allow API to communicate with PostgreSQL
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "galileo.fullname" . }}-api-to-postgres
+  labels:
+    {{- include "galileo.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: api
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# Allow API to communicate with Redis
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "galileo.fullname" . }}-api-to-redis
+  labels:
+    {{- include "galileo.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: api
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+# Allow Ingress traffic to API
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "galileo.fullname" . }}-ingress-to-api
+  labels:
+    {{- include "galileo.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      component: api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 5050
+        - protocol: TCP
+          port: 8000
+---
+# Allow DNS resolution
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "galileo.fullname" . }}-allow-dns
+  labels:
+    {{- include "galileo.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}

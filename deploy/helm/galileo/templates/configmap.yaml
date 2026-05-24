@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "galileo.fullname" . }}-config
+  labels:
+    {{- include "galileo.labels" . | nindent 4 }}
+data:
+  ENVIRONMENT: {{ .Values.global.environment | quote }}
+  LOG_LEVEL: {{ .Values.global.logLevel | default "INFO" | quote }}
+  REQUEST_TIMEOUT_SECONDS: {{ .Values.global.requestTimeoutSeconds | default "30" | quote }}
+  RATE_LIMIT_ENABLED: {{ .Values.global.rateLimitEnabled | default "true" | quote }}
+  RATE_LIMIT_PER_MINUTE: {{ .Values.global.rateLimitPerMinute | default "100" | quote }}
+  CORS_ORIGINS: {{ printf "https://%s" .Values.global.domain | quote }}
+
+  # Telemetry
+  OTEL_SERVICE_NAME: galileo-api
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger-collector:4317"
+  OTEL_TRACE_SAMPLING_RATE: {{ .Values.global.traceSamplingRate | default "0.1" | quote }}
+
+  # Feature flags
+  CSRF_PROTECTION_ENABLED: "true"
+  FILE_UPLOAD_VALIDATION_ENABLED: "true"
+  MAX_FILE_SIZE_MB: {{ .Values.global.maxFileSizeMB | default "100" | quote }}
+
+  # Authentication
+  ACCESS_TOKEN_EXPIRE_MINUTES: "15"
+  REFRESH_TOKEN_EXPIRE_DAYS: "7"
+  MAX_LOGIN_ATTEMPTS: "5"
+  LOCKOUT_DURATION_MINUTES: "30"
