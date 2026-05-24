@@ -1,80 +1,156 @@
-# GALILEO V2.0 - Quick Start Guide
+# GALILEO Quick Start Guide
 
-## 🚀 Start All Services (5 minutes)
+Get GALILEO running in 5 minutes with no port conflicts!
 
-### Option 1: Docker (Recommended - Easiest)
-
-```bash
-# 1. Start infrastructure
-docker-compose up -d postgres redis
-
-# 2. Wait for services to be healthy (10 seconds)
-docker-compose ps
-
-# 3. Initialize database
-python3 scripts/init-database.py
-
-# 4. Start Celery workers
-docker-compose up -d celery-worker celery-beat
-
-# 5. Start API server (in separate terminal)
-./start_dev_api.sh
-
-# 6. Verify everything is running
-curl http://localhost:5050/health
-```
-
-**Stop all services:**
-```bash
-docker-compose down
-```
-
-### Option 2: Manual Setup (macOS)
+## Step 1: Start Infrastructure (2 minutes)
 
 ```bash
-# 1. Start PostgreSQL
-brew services start postgresql@14
-
-# 2. Create database
-psql postgres << EOF
-CREATE USER gravity WITH PASSWORD 'gravity_secret';
-CREATE DATABASE gravity_ops OWNER gravity;
-GRANT ALL PRIVILEGES ON DATABASE gravity_ops TO gravity;
-\\q
-EOF
-
-# 3. Initialize schema
-python3 scripts/init-database.py
-
-# 4. Start Redis
-brew services start redis
-
-# 5. Start Celery worker (Terminal 1)
-celery -A ops.tasks worker --loglevel=info
-
-# 6. Start API server (Terminal 2)
-./start_dev_api.sh
+# Start all backend services
+./scripts/start-infrastructure.sh
 ```
 
-## ✅ Verification
+This starts:
+- PostgreSQL (TimescaleDB) - Port **15432**
+- Redis - Port **16379**
+- MinIO - Ports **19000** (API), **19001** (Console)
+- Kafka - Port **19092**
+- Jaeger - Port **26686** (UI)
+- Prometheus - Port **19090**
+- Grafana - Port **13001**
+- MLflow - Port **15000**
 
-After starting services, run the integration tests:
+## Step 2: Check Services (30 seconds)
 
 ```bash
-python3 test_integration_v2.py
+./scripts/check-services.sh
 ```
 
-**Expected Results:**
-- ✅ PostgreSQL: ~30 database endpoints working
-- ✅ Redis/Celery: ~11 task endpoints working
-- ✅ Total: ~50/103 endpoints working (48%)
+All services should show ✓ Healthy
 
-## 📚 Next Steps
+## Step 3: Start Frontend (1 minute)
 
-1. **Fix remaining bugs** - See ENDPOINT_STATUS_REPORT.md
-2. **Add correct test payloads** - See test_integration_v2.py
-3. **Configure compliance service** - External vault/HSM setup
+```bash
+cd ui
 
----
+# First time only:
+npm install
+cp .env.local.example .env.local
+# Edit .env.local and add Cesium token (optional for 3D globe)
 
-**Platform Version:** 0.4.0
+# Start development server
+npm run dev
+```
+
+Frontend runs on: **http://localhost:13003**
+
+## Access Points
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| **🌐 Frontend** | http://localhost:13003 | - |
+| **📊 Grafana** | http://localhost:13001 | admin / admin |
+| **🔍 Jaeger** | http://localhost:26686 | - |
+| **💾 MinIO Console** | http://localhost:19001 | minioadmin / minioadmin123 |
+| **📈 Prometheus** | http://localhost:19090 | - |
+| **🤖 MLflow** | http://localhost:15000 | - |
+
+## Database Access
+
+```bash
+# PostgreSQL
+psql -h localhost -p 15432 -U galileo galileo
+# Password: galileo_dev_password
+
+# Redis
+redis-cli -h localhost -p 16379
+```
+
+## Stop Everything
+
+```bash
+# Stop infrastructure
+./scripts/stop-infrastructure.sh
+
+# Stop frontend (Ctrl+C in terminal)
+```
+
+## Port Summary
+
+**All ports use 10000+ range to avoid conflicts:**
+
+- Frontend: **13003** (not 3000)
+- PostgreSQL: **15432** (not 5432)
+- Redis: **16379** (not 6379)
+- MinIO: **19000/19001** (not 9000/9001)
+- Kafka: **19092** (not 9092)
+- Grafana: **13001** (not 3001)
+- Jaeger: **26686** (not 16686)
+- Prometheus: **19090** (not 9090)
+- MLflow: **15000** (not 5000)
+
+## Troubleshooting
+
+### Port still in use?
+
+```bash
+# Find what's using the port
+lsof -i :13003
+
+# Kill it
+kill -9 <PID>
+```
+
+### Docker not running?
+
+```bash
+# Start Docker
+sudo systemctl start docker
+
+# Check status
+docker info
+```
+
+### Frontend won't start?
+
+```bash
+# Clear Next.js cache
+cd ui
+rm -rf .next
+npm run dev
+```
+
+## What's Running?
+
+```
+┌─────────────────────────────────────┐
+│  Frontend (localhost:13003)         │
+│  - Next.js + React                  │
+│  - CesiumJS 3D Globe                │
+│  - Real-time dashboards             │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│  Infrastructure Services            │
+│  - PostgreSQL + TimescaleDB         │
+│  - Redis Cache                      │
+│  - MinIO Object Storage             │
+│  - Kafka Event Streaming            │
+│  - Monitoring Stack                 │
+└─────────────────────────────────────┘
+```
+
+## Next Steps
+
+1. ✅ Open frontend: http://localhost:13003
+2. ✅ Check Grafana dashboards: http://localhost:13001
+3. ✅ View traces in Jaeger: http://localhost:26686
+4. 📚 Read full docs: [README.md](README.md)
+5. 🚀 Deploy to production: [Terraform Guide](deploy/terraform/README.md)
+
+## Development Tips
+
+- **Hot reload**: Frontend auto-refreshes on code changes
+- **API Gateway**: Add to docker-compose when ready
+- **Microservices**: See `services/README.md` for gRPC services
+- **Port reference**: See [PORTS.md](PORTS.md) for all ports

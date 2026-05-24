@@ -18,7 +18,7 @@ cp .env.local.example .env.local
 npm run dev
 ```
 
-Visit http://localhost:3000
+Visit http://localhost:13003 (alternative port to avoid conflicts)
 
 ## Architecture
 

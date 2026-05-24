@@ -2,10 +2,11 @@
 
 All ports have been configured to avoid common conflicts.
 
-## Infrastructure Services
+## Frontend & Infrastructure Services
 
 | Service | Internal Port | External Port | URL/Connection |
 |---------|--------------|---------------|----------------|
+| **Frontend (Next.js)** | 3000 | **13003** | `http://localhost:13003` |
 | **PostgreSQL** | 5432 | **15432** | `localhost:15432` |
 | **Redis** | 6379 | **16379** | `localhost:16379` |
 | **MinIO API** | 9000 | **19000** | `http://localhost:19000` |
