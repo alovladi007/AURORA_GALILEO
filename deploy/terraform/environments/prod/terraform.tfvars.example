@@ -1,0 +1,16 @@
+# Example Terraform Variables for Production Environment
+# Copy this file to terraform.tfvars and fill in your values
+
+# AWS Region
+aws_region = "us-east-1"
+
+# Redis Authentication Token (minimum 16 characters)
+# Generate with: openssl rand -base64 32
+redis_auth_token = "your-redis-auth-token-here"
+
+# ACM Certificate ARN for CloudFront (must be in us-east-1)
+# Create certificate in ACM for your domains
+acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/your-cert-id"
+
+# Email for alarm notifications
+alarm_email = "ops@example.com"
