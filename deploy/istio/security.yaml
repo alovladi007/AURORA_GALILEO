@@ -1,0 +1,248 @@
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: default
+spec:
+  mtls:
+    mode: STRICT  # Enforce mTLS for all services
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: api-gateway-mtls
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: galileo-api-gateway
+  mtls:
+    mode: PERMISSIVE  # Allow both mTLS and plaintext for external clients
+---
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: jwt-auth
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: galileo-api-gateway
+  jwtRules:
+    - issuer: "https://galileo.example.com"
+      jwksUri: "https://galileo.example.com/.well-known/jwks.json"
+      audiences:
+        - "galileo-api"
+      forwardOriginalToken: true
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-health-checks
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: galileo-api-gateway
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            paths: ["/health", "/metrics"]
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: require-jwt
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: galileo-api-gateway
+  action: DENY
+  rules:
+    - from:
+        - source:
+            notRequestPrincipals: ["*"]
+      to:
+        - operation:
+            paths: ["/api/*"]
+      when:
+        - key: request.headers[authorization]
+          notValues: ["Bearer *"]
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: internal-services-only
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      service-type: internal  # Applied to data, ml, inversion, control services
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/default/sa/galileo-api-gateway"
+              - "cluster.local/ns/default/sa/galileo-worker"
+---
+# Rate limiting
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: rate-limit-anonymous
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: galileo-api-gateway
+  action: CUSTOM
+  provider:
+    name: ratelimit
+  rules:
+    - to:
+        - operation:
+            paths: ["/api/*"]
+---
+# Network policies for defense in depth
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: default
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-gateway-ingress
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: galileo-api-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 15090  # Prometheus metrics
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-internal-grpc
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      service-type: internal
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: galileo-api-gateway
+        - podSelector:
+            matchLabels:
+              app: galileo-worker
+      ports:
+        - protocol: TCP
+          port: 50051  # Data service
+        - protocol: TCP
+          port: 50052  # ML service
+        - protocol: TCP
+          port: 50053  # Inversion service
+        - protocol: TCP
+          port: 50054  # Control service
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-database-access
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              needs-database: "true"
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-access
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              needs-cache: "true"
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: default
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-https-egress
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      needs-external-access: "true"
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

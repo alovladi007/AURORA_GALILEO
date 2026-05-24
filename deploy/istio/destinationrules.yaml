@@ -1,0 +1,178 @@
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: api-gateway
+  namespace: default
+spec:
+  host: galileo-api-gateway
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL  # mTLS between services
+    connectionPool:
+      tcp:
+        maxConnections: 1000
+      http:
+        http1MaxPendingRequests: 1000
+        http2MaxRequests: 1000
+        maxRequestsPerConnection: 2
+    loadBalancer:
+      simple: LEAST_REQUEST
+    outlierDetection:
+      consecutiveErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: data-service
+  namespace: default
+spec:
+  host: galileo-data-service
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      tcp:
+        maxConnections: 500
+      http:
+        http2MaxRequests: 500
+    loadBalancer:
+      consistentHash:
+        httpHeaderName: "x-user-id"  # Session affinity
+    outlierDetection:
+      consecutiveErrors: 3
+      interval: 20s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 30
+  subsets:
+    - name: v1
+      labels:
+        version: v1
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: ml-service
+  namespace: default
+spec:
+  host: galileo-ml-service
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      tcp:
+        maxConnections: 200
+      http:
+        http2MaxRequests: 200
+    loadBalancer:
+      simple: ROUND_ROBIN
+    outlierDetection:
+      consecutiveErrors: 5
+      interval: 30s
+      baseEjectionTime: 60s
+      maxEjectionPercent: 50
+  subsets:
+    - name: v1
+      labels:
+        version: v1
+    - name: v2
+      labels:
+        version: v2
+      trafficPolicy:
+        connectionPool:
+          http:
+            maxRequestsPerConnection: 1  # Force connection cycling for testing
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: inversion-service
+  namespace: default
+spec:
+  host: galileo-inversion-service
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http2MaxRequests: 100
+        idleTimeout: 600s  # 10 minutes for long-running jobs
+    loadBalancer:
+      simple: LEAST_REQUEST
+    outlierDetection:
+      consecutiveErrors: 2
+      interval: 60s
+      baseEjectionTime: 120s
+      maxEjectionPercent: 25
+  subsets:
+    - name: v1
+      labels:
+        version: v1
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: control-service
+  namespace: default
+spec:
+  host: galileo-control-service
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      tcp:
+        maxConnections: 300
+        connectTimeout: 5s
+      http:
+        http2MaxRequests: 300
+    loadBalancer:
+      simple: ROUND_ROBIN
+    outlierDetection:
+      consecutiveErrors: 2
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 20
+  subsets:
+    - name: v1
+      labels:
+        version: v1
+---
+# Database connection pool
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: postgres
+  namespace: default
+spec:
+  host: postgres
+  trafficPolicy:
+    tls:
+      mode: DISABLE  # PostgreSQL uses its own TLS
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 10s
+    loadBalancer:
+      simple: LEAST_CONN
+---
+# Redis connection pool
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: redis
+  namespace: default
+spec:
+  host: redis
+  trafficPolicy:
+    tls:
+      mode: DISABLE  # Redis uses its own TLS
+    connectionPool:
+      tcp:
+        maxConnections: 200
+        connectTimeout: 5s
+    loadBalancer:
+      simple: RANDOM

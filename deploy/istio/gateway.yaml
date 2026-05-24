@@ -1,0 +1,49 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: galileo-gateway
+  namespace: default
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    # HTTPS
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: galileo-tls-cert  # Secret with TLS cert
+      hosts:
+        - "galileo.example.com"
+        - "api.galileo.example.com"
+    # HTTP redirect to HTTPS
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "galileo.example.com"
+        - "api.galileo.example.com"
+      tls:
+        httpsRedirect: true
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: galileo-egress-gateway
+  namespace: default
+spec:
+  selector:
+    istio: egressgateway
+  servers:
+    - port:
+        number: 443
+        name: tls
+        protocol: TLS
+      hosts:
+        - "*.amazonaws.com"  # Allow AWS services
+        - "*.github.com"      # Allow GitHub
+      tls:
+        mode: PASSTHROUGH

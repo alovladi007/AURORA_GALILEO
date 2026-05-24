@@ -1,0 +1,29 @@
+# API Gateway Requirements
+
+# FastAPI
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# gRPC
+grpcio==1.59.0
+grpcio-tools==1.59.0
+protobuf==4.25.0
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Rate limiting
+slowapi==0.1.9
+
+# OpenTelemetry
+opentelemetry-api==1.21.0
+opentelemetry-sdk==1.21.0
+opentelemetry-instrumentation-fastapi==0.42b0
+opentelemetry-instrumentation-grpc==0.42b0
+opentelemetry-exporter-otlp-proto-grpc==1.21.0
+
+# Utilities
+pydantic==2.4.2
+python-dotenv==1.0.0

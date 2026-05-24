@@ -1,0 +1,164 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: api-gateway
+  namespace: default
+spec:
+  hosts:
+    - "api.galileo.example.com"
+  gateways:
+    - galileo-gateway
+  http:
+    # Health check - no auth required
+    - match:
+        - uri:
+            exact: /health
+      route:
+        - destination:
+            host: galileo-api-gateway
+            port:
+              number: 8000
+      timeout: 5s
+
+    # API routes
+    - match:
+        - uri:
+            prefix: /api/v1/
+      route:
+        - destination:
+            host: galileo-api-gateway
+            port:
+              number: 8000
+          weight: 100
+      timeout: 30s
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: "5xx,reset,connect-failure,refused-stream"
+      corsPolicy:
+        allowOrigins:
+          - exact: "https://galileo.example.com"
+        allowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        allowHeaders:
+          - authorization
+          - content-type
+          - x-request-id
+          - x-csrf-token
+        exposeHeaders:
+          - x-trace-id
+        maxAge: "24h"
+        allowCredentials: true
+      headers:
+        request:
+          add:
+            x-forwarded-proto: https
+        response:
+          add:
+            x-content-type-options: nosniff
+            x-frame-options: DENY
+            strict-transport-security: max-age=31536000; includeSubDomains
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: data-service
+  namespace: default
+spec:
+  hosts:
+    - galileo-data-service
+  http:
+    - route:
+        - destination:
+            host: galileo-data-service
+            port:
+              number: 50051
+            subset: v1
+          weight: 100
+      timeout: 60s
+      retries:
+        attempts: 3
+        perTryTimeout: 20s
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: ml-service
+  namespace: default
+spec:
+  hosts:
+    - galileo-ml-service
+  http:
+    # Canary deployment - 90% v1, 10% v2
+    - match:
+        - headers:
+            x-version:
+              exact: v2
+      route:
+        - destination:
+            host: galileo-ml-service
+            port:
+              number: 50052
+            subset: v2
+          weight: 100
+    - route:
+        - destination:
+            host: galileo-ml-service
+            port:
+              number: 50052
+            subset: v1
+          weight: 90
+        - destination:
+            host: galileo-ml-service
+            port:
+              number: 50052
+            subset: v2
+          weight: 10
+      timeout: 120s
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: inversion-service
+  namespace: default
+spec:
+  hosts:
+    - galileo-inversion-service
+  http:
+    - route:
+        - destination:
+            host: galileo-inversion-service
+            port:
+              number: 50053
+            subset: v1
+          weight: 100
+      timeout: 300s  # 5 minutes for long-running inversions
+      retries:
+        attempts: 2
+        perTryTimeout: 120s
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: control-service
+  namespace: default
+spec:
+  hosts:
+    - galileo-control-service
+  http:
+    - route:
+        - destination:
+            host: galileo-control-service
+            port:
+              number: 50054
+            subset: v1
+          weight: 100
+      timeout: 30s
+      retries:
+        attempts: 5  # Critical service, more retries
+        perTryTimeout: 10s
+        retryOn: "5xx,reset,connect-failure"
