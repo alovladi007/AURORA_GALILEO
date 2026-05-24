@@ -1,0 +1,48 @@
+apiVersion: v2
+name: galileo
+description: GALILEO V2.0 - AI-Enhanced Satellite & Geophysical Sensing Platform
+type: application
+version: 2.0.0
+appVersion: "2.0.0"
+
+keywords:
+  - satellite
+  - geophysical
+  - machine-learning
+  - earth-observation
+  - gravity
+  - sensing
+
+home: https://github.com/alovladi007/AURORA_GALILEO
+sources:
+  - https://github.com/alovladi007/AURORA_GALILEO
+
+maintainers:
+  - name: GALILEO Team
+    email: admin@galileo.example.com
+
+dependencies:
+  - name: postgresql
+    version: 12.x.x
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+
+  - name: redis
+    version: 17.x.x
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+
+  - name: minio
+    version: 12.x.x
+    repository: https://charts.bitnami.com/bitnami
+    condition: minio.enabled
+
+  - name: prometheus
+    version: 23.x.x
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus.enabled
+
+  - name: grafana
+    version: 6.x.x
+    repository: https://grafana.github.io/helm-charts
+    condition: grafana.enabled

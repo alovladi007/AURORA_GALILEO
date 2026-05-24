@@ -1,0 +1,229 @@
+version: '3.8'
+
+# MLflow Tracking Server and Model Registry
+# Extends main docker-compose.yml for ML operations
+
+services:
+  # MLflow Tracking Server
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.9.0
+    container_name: galileo-mlflow
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://${DATABASE_USER:-galileo}:${DATABASE_PASSWORD:-galileo_secret}@postgres:5432/mlflow
+      --default-artifact-root s3://galileo-mlflow-artifacts/
+      --host 0.0.0.0
+      --port 5000
+      --serve-artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      - AWS_ACCESS_KEY_ID=${MINIO_ACCESS_KEY:-minioadmin}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_SECRET_KEY:-galileo_secret_key}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - MLFLOW_TRACKING_URI=http://localhost:5000
+      - MLFLOW_BACKEND_STORE_URI=postgresql://${DATABASE_USER:-galileo}:${DATABASE_PASSWORD:-galileo_secret}@postgres:5432/mlflow
+    ports:
+      - "${MLFLOW_PORT:-5000}:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    networks:
+      - galileo-network
+    restart: unless-stopped
+
+  # Feast Feature Store - Online Store (Redis)
+  # Uses existing Redis service from main docker-compose.yml
+
+  # Feast Feature Store - Offline Store (PostgreSQL)
+  # Uses existing PostgreSQL service from main docker-compose.yml
+
+  # Feast Feature Server
+  feast-server:
+    build:
+      context: .
+      dockerfile: mlops/feast/Dockerfile
+    container_name: galileo-feast
+    command: feast serve
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - FEAST_REGISTRY_PATH=/feast/feature_repo/data/registry.db
+      - FEAST_ONLINE_STORE_TYPE=redis
+      - FEAST_ONLINE_STORE_CONNECTION_STRING=redis:6379
+      - FEAST_OFFLINE_STORE_TYPE=postgres
+      - FEAST_OFFLINE_STORE_CONNECTION_STRING=postgresql://${DATABASE_USER:-galileo}:${DATABASE_PASSWORD:-galileo_secret}@postgres:5432/feast
+    ports:
+      - "${FEAST_PORT:-6566}:6566"
+    volumes:
+      - ./mlops/feast/feature_repo:/feast/feature_repo
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    networks:
+      - galileo-network
+    restart: unless-stopped
+
+  # Evidently AI - Model Monitoring
+  evidently:
+    image: evidently/evidently-ui:latest
+    container_name: galileo-evidently
+    command: evidently ui --host 0.0.0.0 --port 8000
+    ports:
+      - "${EVIDENTLY_PORT:-8001}:8000"
+    volumes:
+      - ./mlops/evidently/projects:/app/projects
+      - ./mlops/evidently/snapshots:/app/snapshots
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    networks:
+      - galileo-network
+    restart: unless-stopped
+
+  # Apache Airflow - Workflow Orchestration
+  airflow-webserver:
+    image: apache/airflow:2.7.3-python3.11
+    container_name: galileo-airflow-webserver
+    command: webserver
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${DATABASE_USER:-galileo}:${DATABASE_PASSWORD:-galileo_secret}@postgres:5432/airflow
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://${DATABASE_USER:-galileo}:${DATABASE_PASSWORD:-galileo_secret}@postgres:5432/airflow
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/2
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY:-}
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+      - AIRFLOW_WEBSERVER_SECRET_KEY=${AIRFLOW_WEBSERVER_SECRET_KEY:-}
+    ports:
+      - "${AIRFLOW_PORT:-8080}:8080"
+    volumes:
+      - ./mlops/airflow/dags:/opt/airflow/dags
+      - ./mlops/airflow/logs:/opt/airflow/logs
+      - ./mlops/airflow/plugins:/opt/airflow/plugins
+      - ./data:/opt/airflow/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    networks:
+      - galileo-network
+    restart: unless-stopped
+
+  airflow-scheduler:
+    image: apache/airflow:2.7.3-python3.11
+    container_name: galileo-airflow-scheduler
+    command: scheduler
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${DATABASE_USER:-galileo}:${DATABASE_PASSWORD:-galileo_secret}@postgres:5432/airflow
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://${DATABASE_USER:-galileo}:${DATABASE_PASSWORD:-galileo_secret}@postgres:5432/airflow
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/2
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY:-}
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+    volumes:
+      - ./mlops/airflow/dags:/opt/airflow/dags
+      - ./mlops/airflow/logs:/opt/airflow/logs
+      - ./mlops/airflow/plugins:/opt/airflow/plugins
+      - ./data:/opt/airflow/data
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    networks:
+      - galileo-network
+    restart: unless-stopped
+
+  airflow-worker:
+    image: apache/airflow:2.7.3-python3.11
+    container_name: galileo-airflow-worker
+    command: celery worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${DATABASE_USER:-galileo}:${DATABASE_PASSWORD:-galileo_secret}@postgres:5432/airflow
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://${DATABASE_USER:-galileo}:${DATABASE_PASSWORD:-galileo_secret}@postgres:5432/airflow
+      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/2
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY:-}
+    volumes:
+      - ./mlops/airflow/dags:/opt/airflow/dags
+      - ./mlops/airflow/logs:/opt/airflow/logs
+      - ./mlops/airflow/plugins:/opt/airflow/plugins
+      - ./data:/opt/airflow/data
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+    networks:
+      - galileo-network
+    restart: unless-stopped
+
+volumes:
+  mlflow_data:
+    driver: local
+
+networks:
+  galileo-network:
+    external: true

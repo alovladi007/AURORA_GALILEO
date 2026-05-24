@@ -1,0 +1,460 @@
+# GALILEO Platform - Helm Chart Values
+# Production-ready configuration for Kubernetes deployment
+
+global:
+  environment: production
+  domain: galileo.example.com
+  storageClass: standard
+
+# API Service Configuration
+api:
+  enabled: true
+  name: galileo-api
+  replicaCount: 3
+
+  image:
+    repository: galileo/api
+    tag: "2.0.0"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 5050
+    targetPort: 5050
+
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  env:
+    - name: ENVIRONMENT
+      value: "production"
+    - name: LOG_LEVEL
+      value: "INFO"
+    - name: REQUEST_TIMEOUT_SECONDS
+      value: "30"
+    - name: RATE_LIMIT_ENABLED
+      value: "true"
+    - name: RATE_LIMIT_PER_MINUTE
+      value: "100"
+
+  envFrom:
+    - secretRef:
+        name: galileo-secrets
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 5050
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 5050
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "5050"
+    prometheus.io/path: "/metrics"
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+
+# Operations API Service Configuration
+opsApi:
+  enabled: true
+  name: galileo-ops-api
+  replicaCount: 2
+
+  image:
+    repository: galileo/ops-api
+    tag: "2.0.0"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+
+# Celery Worker Configuration
+worker:
+  enabled: true
+  name: galileo-worker
+  replicaCount: 4
+
+  image:
+    repository: galileo/worker
+    tag: "2.0.0"
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 2000m
+      memory: 4Gi
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 4
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 75
+
+  concurrency: 4
+
+  queues:
+    - default
+    - simulation
+    - ml
+    - inversion
+
+# Celery Beat Scheduler
+beat:
+  enabled: true
+  name: galileo-beat
+  replicaCount: 1  # Must be 1 for scheduler
+
+  image:
+    repository: galileo/beat
+    tag: "2.0.0"
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Frontend UI Configuration
+ui:
+  enabled: true
+  name: galileo-ui
+  replicaCount: 2
+
+  image:
+    repository: galileo/ui
+    tag: "2.0.0"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 3000
+    targetPort: 3000
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+# PostgreSQL Database (using Bitnami chart)
+postgresql:
+  enabled: true
+  auth:
+    existingSecret: galileo-secrets
+    secretKeys:
+      adminPasswordKey: database-password
+      userPasswordKey: database-password
+  primary:
+    persistence:
+      enabled: true
+      size: 100Gi
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+  readReplicas:
+    replicaCount: 2
+    persistence:
+      enabled: true
+      size: 100Gi
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+
+# Redis Cache (using Bitnami chart)
+redis:
+  enabled: true
+  auth:
+    existingSecret: galileo-secrets
+    existingSecretPasswordKey: redis-password
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+  replica:
+    replicaCount: 2
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+
+# MinIO Object Storage (using Bitnami chart)
+minio:
+  enabled: true
+  auth:
+    existingSecret: galileo-secrets
+  mode: distributed
+  statefulset:
+    replicaCount: 4
+  persistence:
+    enabled: true
+    size: 500Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  metrics:
+    serviceMonitor:
+      enabled: true
+
+# Prometheus Monitoring
+prometheus:
+  enabled: true
+  server:
+    persistentVolume:
+      enabled: true
+      size: 50Gi
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+  alertmanager:
+    enabled: true
+    persistentVolume:
+      enabled: true
+      size: 10Gi
+
+# Grafana Dashboards
+grafana:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 10Gi
+  adminPassword: changeme  # Override with secret
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://prometheus-server
+          isDefault: true
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'default'
+          orgId: 1
+          folder: ''
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards
+
+# Ingress Configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+    - host: galileo.example.com
+      paths:
+        - path: /api
+          pathType: Prefix
+          backend:
+            service:
+              name: galileo-api
+              port: 5050
+        - path: /ops
+          pathType: Prefix
+          backend:
+            service:
+              name: galileo-ops-api
+              port: 8000
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: galileo-ui
+              port: 3000
+  tls:
+    - secretName: galileo-tls
+      hosts:
+        - galileo.example.com
+
+# Service Mesh (Istio) Configuration
+serviceMesh:
+  enabled: false  # Enable when Istio is installed
+  mtls:
+    mode: STRICT
+  destinationRules:
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 100
+        http:
+          http1MaxPendingRequests: 50
+          http2MaxRequests: 100
+      outlierDetection:
+        consecutiveErrors: 5
+        interval: 30s
+        baseEjectionTime: 30s
+
+# Network Policies
+networkPolicies:
+  enabled: true
+  policyTypes:
+    - Ingress
+    - Egress
+
+# Pod Disruption Budgets
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Secrets (use external secret management in production)
+secrets:
+  databasePassword: "changeme"
+  redisPassword: "changeme"
+  minioAccessKey: "changeme"
+  minioSecretKey: "changeme"
+  jwtSecretKey: "changeme"
+  secretKey: "changeme"
+
+# Persistent Volume Claims
+persistence:
+  data:
+    enabled: true
+    size: 100Gi
+    storageClass: standard
+  checkpoints:
+    enabled: true
+    size: 50Gi
+    storageClass: standard
+  logs:
+    enabled: true
+    size: 20Gi
+    storageClass: standard
+
+# RBAC Configuration
+rbac:
+  create: true
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: galileo
+
+# Image Pull Secrets
+imagePullSecrets: []

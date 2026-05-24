@@ -74,3 +74,18 @@ tensorboard==2.14.0
 prometheus-client==0.17.0
 opentelemetry-api==1.20.0
 opentelemetry-sdk==1.20.0
+
+# File validation and security
+python-magic==0.4.27
+pyclamd==0.4.0  # ClamAV integration (optional)
+
+# MLOps
+mlflow==2.9.0
+feast==0.35.0
+evidently==0.4.10
+dvc==3.30.0
+
+# Data pipeline
+apache-airflow==2.7.3
+apache-airflow-providers-postgres==5.7.1
+apache-airflow-providers-amazon==8.10.0
