@@ -1,0 +1,122 @@
+{{- if .Values.opsApi.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.opsApi.name }}
+  labels:
+    app: {{ .Values.opsApi.name }}
+    component: ops-api
+    {{- include "galileo.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.opsApi.autoscaling.enabled }}
+  replicas: {{ .Values.opsApi.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: {{ .Values.opsApi.name }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.opsApi.name }}
+        component: ops-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "galileo.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: ops-api
+          image: "{{ .Values.opsApi.image.repository }}:{{ .Values.opsApi.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.opsApi.image.pullPolicy }}
+          command:
+            - uvicorn
+            - ops.main:app
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8000"
+            - --workers
+            - "4"
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.opsApi.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.opsApi.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.opsApi.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "galileo.fullname" . }}-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: galileo-secrets
+                  key: database-url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: galileo-secrets
+                  key: redis-url
+            - name: MINIO_ENDPOINT
+              value: "{{ .Release.Name }}-minio:9000"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: galileo-secrets
+                  key: minio-access-key
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: galileo-secrets
+                  key: minio-secret-key
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: galileo-secrets
+                  key: jwt-secret-key
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: logs
+              mountPath: /app/logs
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-data
+        - name: logs
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-logs
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.opsApi.name }}
+  labels:
+    app: {{ .Values.opsApi.name }}
+    {{- include "galileo.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.opsApi.service.type }}
+  ports:
+    - port: {{ .Values.opsApi.service.port }}
+      targetPort: {{ .Values.opsApi.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    app: {{ .Values.opsApi.name }}
+{{- end }}

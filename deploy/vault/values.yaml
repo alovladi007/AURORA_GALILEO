@@ -1,0 +1,209 @@
+# HashiCorp Vault - Production Helm Values for GALILEO
+# Deploys Vault in HA mode with Raft storage and auto-unseal
+
+global:
+  enabled: true
+  tlsDisable: false
+
+injector:
+  enabled: true
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  affinity: |
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ template "vault.name" . }}-agent-injector
+              app.kubernetes.io/instance: "{{ .Release.Name }}"
+              component: webhook
+          topologyKey: kubernetes.io/hostname
+
+  metrics:
+    enabled: true
+
+server:
+  enabled: true
+  image:
+    repository: "hashicorp/vault"
+    tag: "1.15.2"
+
+  # Resources
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+  # Affinity for HA
+  affinity: |
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ template "vault.name" . }}
+              app.kubernetes.io/instance: "{{ .Release.Name }}"
+              component: server
+          topologyKey: kubernetes.io/hostname
+
+  # Liveness/Readiness probes
+  livenessProbe:
+    enabled: true
+    path: "/v1/sys/health?standbyok=true"
+    initialDelaySeconds: 60
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 2
+    successThreshold: 1
+
+  readinessProbe:
+    enabled: true
+    path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 2
+    successThreshold: 1
+
+  # HA configuration with Raft
+  ha:
+    enabled: true
+    replicas: 3
+
+    # Raft storage backend
+    raft:
+      enabled: true
+      setNodeId: true
+
+      config: |
+        ui = true
+
+        listener "tcp" {
+          tls_disable = 0
+          address     = "[::]:8200"
+          cluster_address = "[::]:8201"
+          tls_cert_file = "/vault/userconfig/vault-server-tls/tls.crt"
+          tls_key_file  = "/vault/userconfig/vault-server-tls/tls.key"
+          tls_client_ca_file = "/vault/userconfig/vault-server-tls/ca.crt"
+        }
+
+        storage "raft" {
+          path = "/vault/data"
+
+          retry_join {
+            leader_api_addr = "https://vault-0.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
+          }
+          retry_join {
+            leader_api_addr = "https://vault-1.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
+          }
+          retry_join {
+            leader_api_addr = "https://vault-2.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
+          }
+
+          autopilot {
+            cleanup_dead_servers = "true"
+            last_contact_threshold = "200ms"
+            last_contact_failure_threshold = "10m"
+            max_trailing_logs = 250000
+            min_quorum = 3
+            server_stabilization_time = "10s"
+          }
+        }
+
+        # Seal with AWS KMS (auto-unseal)
+        seal "awskms" {
+          region     = "us-west-2"
+          kms_key_id = "alias/vault-unseal"
+        }
+
+        service_registration "kubernetes" {}
+
+        # Telemetry
+        telemetry {
+          prometheus_retention_time = "30s"
+          disable_hostname = true
+        }
+
+        # Cluster settings
+        cluster_name = "vault-galileo"
+        api_addr = "https://POD_IP:8200"
+        cluster_addr = "https://POD_IP:8201"
+
+        log_level = "info"
+        log_format = "json"
+
+  # Audit storage
+  auditStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: gp3
+
+  # Data storage
+  dataStorage:
+    enabled: true
+    size: 100Gi
+    storageClass: gp3
+
+  # Service annotations for metrics
+  service:
+    enabled: true
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8200"
+      prometheus.io/path: "/v1/sys/metrics?format=prometheus"
+
+  # Service account with IAM role for KMS access
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/vault-server
+
+  # Volumes for TLS certificates
+  volumes:
+    - name: vault-server-tls
+      secret:
+        secretName: vault-server-tls
+        defaultMode: 420
+
+  volumeMounts:
+    - name: vault-server-tls
+      mountPath: /vault/userconfig/vault-server-tls
+      readOnly: true
+
+  # Environment variables
+  extraEnvironmentVars:
+    VAULT_CACERT: /vault/userconfig/vault-server-tls/ca.crt
+    AWS_REGION: us-west-2
+
+  # Auto-init job (only run once)
+  postStart:
+    - "/bin/sh"
+    - "-c"
+    - "echo 'Vault server starting...'"
+
+# UI configuration
+ui:
+  enabled: true
+  serviceType: ClusterIP
+  externalPort: 8200
+
+# CSI provider for secrets
+csi:
+  enabled: true
+  daemonSet:
+    updateStrategy:
+      type: RollingUpdate
+      maxUnavailable: 1

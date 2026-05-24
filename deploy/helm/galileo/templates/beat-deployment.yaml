@@ -1,0 +1,67 @@
+{{- if .Values.beat.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.beat.name }}
+  labels:
+    app: {{ .Values.beat.name }}
+    component: beat
+    {{- include "galileo.labels" . | nindent 4 }}
+spec:
+  # Must be exactly 1 - Celery Beat is a singleton scheduler
+  replicas: 1
+  strategy:
+    type: Recreate  # Don't run multiple schedulers
+  selector:
+    matchLabels:
+      app: {{ .Values.beat.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.beat.name }}
+        component: beat
+    spec:
+      serviceAccountName: {{ include "galileo.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: beat
+          image: "{{ .Values.beat.image.repository }}:{{ .Values.beat.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.beat.image.pullPolicy }}
+          command:
+            - celery
+            - -A
+            - ops.tasks
+            - beat
+            - --loglevel=info
+          resources:
+            {{- toYaml .Values.beat.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "galileo.fullname" . }}-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: galileo-secrets
+                  key: database-url
+            - name: CELERY_BROKER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: galileo-secrets
+                  key: redis-url
+            - name: CELERY_RESULT_BACKEND
+              valueFrom:
+                secretKeyRef:
+                  name: galileo-secrets
+                  key: redis-url
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-data
+{{- end }}
