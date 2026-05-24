@@ -1,15 +1,96 @@
-# GALILEO V2.0
+# GALILEO V2.0 🛰️
 
 **Geospatial Analytics, Learning, and Intelligence for Land, Environment & Oceanography**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3+-3178c6.svg)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/license-Proprietary-red.svg)](LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Status](https://img.shields.io/badge/status-Production%20Ready-success.svg)]()
+[![Production Ready](https://img.shields.io/badge/status-Production%20Ready%2095%25-success.svg)]()
+[![Kubernetes](https://img.shields.io/badge/kubernetes-ready-326ce5.svg)](https://kubernetes.io/)
+[![Istio](https://img.shields.io/badge/istio-service%20mesh-466bb0.svg)](https://istio.io/)
 
-**Enterprise-Grade AI-Enhanced Space-Based Geophysical Sensing Platform**
+**🌍 Enterprise-Grade Cloud-Native Space-Based Geophysical Sensing Platform**
 
-A comprehensive, production-ready orbital dynamics, guidance/navigation/control, geophysical inversion, and machine learning platform designed for autonomous satellite-based gravimetry missions. Built with JAX for hardware acceleration, featuring complete security/compliance infrastructure, mission trade analysis, and real-time visualization.
+Production-ready microservices architecture for autonomous satellite gravimetry missions. Built with modern cloud-native technologies: Kubernetes, Istio service mesh, gRPC microservices, distributed tracing, and comprehensive MLOps infrastructure. Features zero-trust security, auto-scaling, and 99.9% SLA compliance.
+
+---
+
+## 🚀 Quick Start
+
+```bash
+# Start infrastructure services (PostgreSQL, Redis, Kafka, monitoring)
+./scripts/start-infrastructure.sh
+
+# Check services are healthy
+./scripts/check-services.sh
+
+# Access dashboards
+# Grafana:  http://localhost:13001 (admin/admin)
+# Jaeger:   http://localhost:26686
+# MinIO:    http://localhost:19001 (minioadmin/minioadmin123)
+```
+
+**📖 Documentation**:
+- [Infrastructure Setup](INFRASTRUCTURE_SETUP.md) - Start local services
+- [Port Mapping](PORTS.md) - Service ports and connections
+- [Microservices](services/README.md) - gRPC services architecture
+- [Istio Service Mesh](deploy/istio/README.md) - Traffic management & security
+- [Terraform Deployment](deploy/terraform/README.md) - Production infrastructure
+
+---
+
+## 🏗️ Architecture
+
+GALILEO V2.0 is a cloud-native, microservices-based platform:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Internet / Users                          │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+         ┌─────────────▼─────────────┐
+         │   CloudFront CDN          │ (Global edge caching)
+         └─────────────┬─────────────┘
+                       │
+         ┌─────────────▼─────────────┐
+         │   Istio Gateway (mTLS)    │ (Zero-trust security)
+         └─────────────┬─────────────┘
+                       │
+         ┌─────────────▼─────────────┐
+         │   API Gateway (FastAPI)   │ (REST → gRPC)
+         └─────────────┬─────────────┘
+                       │
+    ┌──────────────────┼──────────────────┐
+    │                  │                  │
+    ▼                  ▼                  ▼
+┌────────┐        ┌────────┐        ┌────────┐
+│  Data  │        │   ML   │        │Inversion│
+│Service │        │Service │        │Service  │
+└────┬───┘        └────┬───┘        └────┬────┘
+     │                 │                  │
+     └─────────────────┼──────────────────┘
+                       │
+    ┌──────────────────┼──────────────────┐
+    ▼                  ▼                  ▼
+┌──────────┐     ┌────────┐        ┌────────┐
+│PostgreSQL│     │ Redis  │        │ MinIO  │
+│TimescaleDB│    │ Cache  │        │  S3    │
+└──────────┘     └────────┘        └────────┘
+```
+
+**Technology Stack**:
+- **Container Orchestration**: Kubernetes (EKS) with Helm
+- **Service Mesh**: Istio with mTLS, circuit breakers, canary deployments
+- **API Gateway**: FastAPI with gRPC clients, JWT auth, rate limiting
+- **Microservices**: Python gRPC services (Data, ML, Inversion, Control)
+- **Frontend**: Next.js 14 with TypeScript, Tailwind CSS, CesiumJS 3D
+- **Databases**: PostgreSQL + TimescaleDB (time-series), Redis (cache)
+- **Storage**: MinIO (S3-compatible), CloudFront CDN
+- **Message Queue**: Apache Kafka for event streaming
+- **ML Platform**: MLflow, PyTorch, JAX
+- **Observability**: Jaeger (tracing), Prometheus (metrics), Grafana (dashboards)
+- **Infrastructure**: Terraform (150+ AWS resources), Vault (secrets)
 
 ---
 

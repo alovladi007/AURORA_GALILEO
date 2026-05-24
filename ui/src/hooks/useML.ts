@@ -2,10 +2,11 @@
  * ML Service Hook
  *
  * Provides React Query hooks for PINN and U-Net model operations
+ * Updated for microservices architecture
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api-client-full'
+import { api } from '@/lib/api-client'
 import toast from 'react-hot-toast'
 
 export interface ModelConfig {
@@ -250,4 +251,122 @@ export function useUNetUncertainty() {
     data: uncertaintyMutation.data,
     error: uncertaintyMutation.error,
   }
+}
+
+// New microservices-based ML hooks
+
+export function useTrainModel() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (data: {
+      model_name: string
+      model_type: string
+      dataset_id: string
+      num_epochs?: number
+      batch_size?: number
+      learning_rate?: number
+    }) => {
+      const response = await api.trainModel(data)
+      return response.data
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['ml-models'] })
+      toast.success(`Training started: ${data.job_id}`)
+    },
+    onError: (error: any) => {
+      toast.error(`Training failed: ${error.response?.data?.detail || error.message}`)
+    },
+  })
+}
+
+export function useTrainingStatus(jobId: string | null) {
+  return useQuery({
+    queryKey: ['training-status', jobId],
+    queryFn: async () => {
+      if (!jobId) return null
+      const response = await api.getTrainingStatus(jobId)
+      return response.data
+    },
+    enabled: !!jobId,
+    refetchInterval: (data) => {
+      if (data?.status === 'running') return 2000
+      if (data?.status === 'pending') return 5000
+      return false
+    },
+  })
+}
+
+export function useListModels(params?: {
+  model_type?: string
+  status?: string
+}) {
+  return useQuery({
+    queryKey: ['ml-models', params],
+    queryFn: async () => {
+      const response = await api.listModels(params)
+      return response.data
+    },
+    refetchInterval: 10000,
+  })
+}
+
+export function useModelPredict(modelId: string) {
+  return useMutation({
+    mutationFn: async (data: {
+      input_features: number[]
+      options?: Record<string, string>
+    }) => {
+      const response = await api.predict(modelId, data)
+      return response.data
+    },
+    onSuccess: () => {
+      toast.success('Prediction complete')
+    },
+    onError: (error: any) => {
+      toast.error(`Prediction failed: ${error.response?.data?.detail || error.message}`)
+    },
+  })
+}
+
+export function useDeployModel() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (params: {
+      modelId: string
+      deployment_name: string
+      num_replicas?: number
+      instance_type?: string
+    }) => {
+      const { modelId, ...data } = params
+      const response = await api.deployModel(modelId, data)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ml-models'] })
+      toast.success('Model deployed')
+    },
+    onError: (error: any) => {
+      toast.error(`Deployment failed: ${error.response?.data?.detail || error.message}`)
+    },
+  })
+}
+
+export function useDeleteModel() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (modelId: string) => {
+      const response = await api.deleteModel(modelId)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ml-models'] })
+      toast.success('Model deleted')
+    },
+    onError: (error: any) => {
+      toast.error(`Delete failed: ${error.response?.data?.detail || error.message}`)
+    },
+  })
 }

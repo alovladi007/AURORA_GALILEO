@@ -1,6 +1,6 @@
-# GeoSense Platform - UI
+# GALILEO Platform - Web UI
 
-Next.js web application with CesiumJS 3D globe visualization.
+Modern Next.js web application with CesiumJS 3D globe visualization, connecting to microservices backend.
 
 ## Quick Start
 
@@ -10,7 +10,9 @@ npm install
 
 # Set up environment variables
 cp .env.local.example .env.local
-# Edit .env.local and add your Cesium Ion token
+# Edit .env.local and configure:
+# - NEXT_PUBLIC_API_URL=http://localhost:18000 (API Gateway)
+# - NEXT_PUBLIC_CESIUM_ION_TOKEN=your_token_here
 
 # Run development server
 npm run dev
@@ -18,12 +20,28 @@ npm run dev
 
 Visit http://localhost:3000
 
+## Architecture
+
+The UI connects to GALILEO's microservices through the API Gateway:
+
+```
+UI (Next.js) → API Gateway (port 18000) → Microservices (gRPC)
+                                          ├─ Data Service
+                                          ├─ ML Service
+                                          ├─ Inversion Service
+                                          └─ Control Service
+```
+
 ## Features
 
 - **3D Globe Viewer**: CesiumJS-powered Earth visualization
+- **Real-time Telemetry**: Live satellite data streaming
 - **Orbit Visualization**: Real-time satellite orbit rendering
 - **Gravity Mapping**: Geophysical gravity anomaly visualization
-- **API Integration**: Connects to FastAPI backend on port 5050
+- **ML Model Management**: Train, deploy, and monitor models
+- **Inversion Jobs**: Start and track gravity field inversions
+- **Satellite Control**: Send commands and monitor satellites
+- **API Integration**: Connects to microservices via API Gateway (port 18000)
 
 ## Get Cesium Ion Token
 

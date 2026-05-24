@@ -2,10 +2,11 @@
  * Inversion Service Hook
  *
  * Provides React Query hooks for gravity field inversion operations
+ * Updated for microservices architecture
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api-client-full'
+import { api } from '@/lib/api-client'
 import toast from 'react-hot-toast'
 
 export interface InversionConfig {
@@ -152,5 +153,107 @@ export function useLastGravityGrid() {
     queryKey: ['lastGravityGrid'],
     queryFn: () => null,
     staleTime: Infinity,
+  })
+}
+
+// New microservices-based hooks
+
+export function useInversionJobs(params?: {
+  status?: string
+  start_time?: string
+  end_time?: string
+}) {
+  return useQuery({
+    queryKey: ['inversions', params],
+    queryFn: async () => {
+      const response = await api.listInversions(params)
+      return response.data
+    },
+    refetchInterval: 5000, // Poll every 5 seconds
+  })
+}
+
+export function useInversionJob(jobId: string | null) {
+  return useQuery({
+    queryKey: ['inversion', jobId],
+    queryFn: async () => {
+      if (!jobId) return null
+      const response = await api.getInversionStatus(jobId)
+      return response.data
+    },
+    enabled: !!jobId,
+    refetchInterval: (data) => {
+      // Poll more frequently if job is running
+      if (data?.status === 'running') return 2000
+      if (data?.status === 'queued') return 5000
+      return false // Stop polling if completed/failed
+    },
+  })
+}
+
+export function useStartInversion() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (data: {
+      name: string
+      description?: string
+      measurement_ids: string[]
+      parameters?: any
+      grid?: any
+    }) => {
+      const response = await api.startInversion(data)
+      return response.data
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['inversions'] })
+      toast.success(`Inversion job started: ${data.job_id}`)
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to start inversion: ${error.response?.data?.detail || error.message}`)
+    },
+  })
+}
+
+export function useCancelInversion() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (jobId: string) => {
+      const response = await api.cancelInversion(jobId)
+      return response.data
+    },
+    onSuccess: (_, jobId) => {
+      queryClient.invalidateQueries({ queryKey: ['inversions'] })
+      queryClient.invalidateQueries({ queryKey: ['inversion', jobId] })
+      toast.success('Inversion cancelled')
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to cancel: ${error.response?.data?.detail || error.message}`)
+    },
+  })
+}
+
+export function useDownloadInversionResults() {
+  return useMutation({
+    mutationFn: async (params: { jobId: string; format?: string }) => {
+      const response = await api.getInversionResults(params.jobId, params.format)
+      return response.data
+    },
+    onSuccess: (blob, params) => {
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `inversion_${params.jobId}.${params.format || 'netcdf'}`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast.success('Results downloaded')
+    },
+    onError: (error: any) => {
+      toast.error(`Download failed: ${error.response?.data?.detail || error.message}`)
+    },
   })
 }
