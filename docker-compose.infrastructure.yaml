@@ -13,7 +13,7 @@ services:
       - POSTGRES_USER=galileo
       - POSTGRES_PASSWORD=galileo_dev_password
     ports:
-      - "5432:5432"
+      - "15432:5432"  # Alternative port to avoid conflicts
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./ops/db/timescale_setup.sql:/docker-entrypoint-initdb.d/01-timescale.sql
@@ -32,7 +32,7 @@ services:
     container_name: galileo-redis
     command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
     ports:
-      - "6379:6379"
+      - "16379:6379"  # Alternative port to avoid conflicts
     volumes:
       - redis-data:/data
     networks:
@@ -50,8 +50,8 @@ services:
     container_name: galileo-minio
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "19000:9000"  # Alternative port to avoid conflicts
+      - "19001:9001"  # Alternative port to avoid conflicts
     environment:
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin123
@@ -107,11 +107,11 @@ services:
     depends_on:
       - zookeeper
     ports:
-      - "9092:9092"
+      - "19092:9092"  # Alternative port to avoid conflicts
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:19092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_LOG_RETENTION_HOURS: 168
@@ -131,15 +131,15 @@ services:
     image: jaegertracing/all-in-one:1.50
     container_name: galileo-jaeger
     ports:
-      - "5775:5775/udp"
-      - "6831:6831/udp"
-      - "6832:6832/udp"
-      - "5778:5778"
-      - "16686:16686"  # Jaeger UI
-      - "14268:14268"
-      - "14250:14250"
-      - "4317:4317"    # OTLP gRPC
-      - "4318:4318"    # OTLP HTTP
+      - "15775:5775/udp"
+      - "16831:6831/udp"
+      - "16832:6832/udp"
+      - "15778:5778"
+      - "26686:16686"  # Jaeger UI - Alternative port
+      - "24268:14268"
+      - "24250:14250"
+      - "14317:4317"   # OTLP gRPC - Alternative port
+      - "14318:4318"   # OTLP HTTP - Alternative port
     environment:
       - COLLECTOR_OTLP_ENABLED=true
       - LOG_LEVEL=info
@@ -152,7 +152,7 @@ services:
     image: prom/prometheus:latest
     container_name: galileo-prometheus
     ports:
-      - "9090:9090"
+      - "19090:9090"  # Alternative port to avoid conflicts
     volumes:
       - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
@@ -171,12 +171,12 @@ services:
     image: grafana/grafana:latest
     container_name: galileo-grafana
     ports:
-      - "3001:3000"
+      - "13001:3000"  # Alternative port to avoid conflicts
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_INSTALL_PLUGINS=grafana-clock-panel
-      - GF_SERVER_ROOT_URL=http://localhost:3001
+      - GF_SERVER_ROOT_URL=http://localhost:13001
     volumes:
       - grafana-data:/var/lib/grafana
     depends_on:
@@ -190,7 +190,7 @@ services:
     image: ghcr.io/mlflow/mlflow:v2.8.0
     container_name: galileo-mlflow
     ports:
-      - "5000:5000"
+      - "15000:5000"  # Alternative port to avoid conflicts
     environment:
       - MLFLOW_BACKEND_STORE_URI=postgresql://galileo:galileo_dev_password@postgres:5432/galileo
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=s3://mlflow-artifacts/

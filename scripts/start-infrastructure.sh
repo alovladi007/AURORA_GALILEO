@@ -42,7 +42,7 @@ echo ""
 
 # Check for port conflicts
 echo -e "${YELLOW}Checking for port conflicts...${NC}"
-PORTS=(5432 6379 9000 9001 9090 9092 3001 5000 16686 4317)
+PORTS=(15432 16379 19000 19001 19090 19092 13001 15000 26686 14317)
 CONFLICTS=()
 
 for port in "${PORTS[@]}"; do
@@ -118,31 +118,35 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 
 # Display service URLs
-echo -e "${BLUE}Service URLs:${NC}"
-echo -e "  PostgreSQL:       ${YELLOW}localhost:5432${NC}"
+echo -e "${BLUE}Service URLs (alternative ports to avoid conflicts):${NC}"
+echo -e "  PostgreSQL:       ${YELLOW}localhost:15432${NC}"
 echo -e "    User:           galileo"
 echo -e "    Password:       galileo_dev_password"
 echo -e "    Database:       galileo"
+echo -e "    Connect:        psql -h localhost -p 15432 -U galileo galileo"
 echo ""
-echo -e "  Redis:            ${YELLOW}localhost:6379${NC}"
+echo -e "  Redis:            ${YELLOW}localhost:16379${NC}"
+echo -e "    Connect:        redis-cli -h localhost -p 16379"
 echo ""
-echo -e "  MinIO Console:    ${YELLOW}http://localhost:9001${NC}"
+echo -e "  MinIO Console:    ${YELLOW}http://localhost:19001${NC}"
 echo -e "    User:           minioadmin"
 echo -e "    Password:       minioadmin123"
 echo ""
-echo -e "  MinIO API:        ${YELLOW}http://localhost:9000${NC}"
+echo -e "  MinIO API:        ${YELLOW}http://localhost:19000${NC}"
 echo ""
-echo -e "  Kafka:            ${YELLOW}localhost:9092${NC}"
+echo -e "  Kafka:            ${YELLOW}localhost:19092${NC}"
 echo ""
-echo -e "  Jaeger UI:        ${YELLOW}http://localhost:16686${NC}"
+echo -e "  Jaeger UI:        ${YELLOW}http://localhost:26686${NC}"
 echo ""
-echo -e "  Prometheus:       ${YELLOW}http://localhost:9090${NC}"
+echo -e "  Prometheus:       ${YELLOW}http://localhost:19090${NC}"
 echo ""
-echo -e "  Grafana:          ${YELLOW}http://localhost:3001${NC}"
+echo -e "  Grafana:          ${YELLOW}http://localhost:13001${NC}"
 echo -e "    User:           admin"
 echo -e "    Password:       admin"
 echo ""
-echo -e "  MLflow:           ${YELLOW}http://localhost:5000${NC}"
+echo -e "  MLflow:           ${YELLOW}http://localhost:15000${NC}"
+echo ""
+echo -e "${BLUE}📖 See PORTS.md for complete port mapping${NC}"
 echo ""
 
 # Show container status

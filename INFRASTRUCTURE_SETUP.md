@@ -39,16 +39,21 @@ docker compose -f docker-compose.infrastructure.yaml ps
 
 ## Services Overview
 
-| Service | Port | URL | Credentials |
-|---------|------|-----|-------------|
-| PostgreSQL | 5432 | localhost:5432 | galileo / galileo_dev_password |
-| Redis | 6379 | localhost:6379 | (no auth) |
-| MinIO Console | 9001 | http://localhost:9001 | minioadmin / minioadmin123 |
-| Grafana | 3001 | http://localhost:3001 | admin / admin |
-| Jaeger UI | 16686 | http://localhost:16686 | (no auth) |
-| Prometheus | 9090 | http://localhost:9090 | (no auth) |
-| MLflow | 5000 | http://localhost:5000 | (no auth) |
-| Kafka | 9092 | localhost:9092 | (no auth) |
+**Note**: Using alternative ports (10000+ range) to avoid conflicts with common services.
+
+| Service | Internal Port | External Port | URL | Credentials |
+|---------|--------------|---------------|-----|-------------|
+| PostgreSQL | 5432 | **15432** | localhost:15432 | galileo / galileo_dev_password |
+| Redis | 6379 | **16379** | localhost:16379 | (no auth) |
+| MinIO Console | 9001 | **19001** | http://localhost:19001 | minioadmin / minioadmin123 |
+| MinIO API | 9000 | **19000** | http://localhost:19000 | - |
+| Grafana | 3000 | **13001** | http://localhost:13001 | admin / admin |
+| Jaeger UI | 16686 | **26686** | http://localhost:26686 | (no auth) |
+| Prometheus | 9090 | **19090** | http://localhost:19090 | (no auth) |
+| MLflow | 5000 | **15000** | http://localhost:15000 | (no auth) |
+| Kafka | 9092 | **19092** | localhost:19092 | (no auth) |
+
+📖 **See [PORTS.md](PORTS.md) for complete port mapping and connection examples.**
 
 ## Common Tasks
 
@@ -84,8 +89,8 @@ docker compose -f docker-compose.infrastructure.yaml down
 docker compose -f docker-compose.infrastructure.yaml exec postgres \
   psql -U galileo -d galileo
 
-# Direct connection
-psql -h localhost -U galileo -d galileo
+# Direct connection (note the port!)
+psql -h localhost -p 15432 -U galileo -d galileo
 ```
 
 ### Access Redis
@@ -94,8 +99,8 @@ psql -h localhost -U galileo -d galileo
 # Using Docker exec
 docker compose -f docker-compose.infrastructure.yaml exec redis redis-cli
 
-# Direct connection
-redis-cli -h localhost
+# Direct connection (note the port!)
+redis-cli -h localhost -p 16379
 ```
 
 ## Port Conflicts
