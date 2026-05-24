@@ -1,0 +1,127 @@
+// Data Service API for satellite data and gravity measurements
+syntax = "proto3";
+
+package galileo.data;
+
+import "google/protobuf/timestamp.proto";
+import "proto/common.proto";
+
+// Satellite telemetry data
+message SatelliteTelemetry {
+  string satellite_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  galileo.common.GeoLocation location = 3;
+  double velocity_x = 4;  // m/s
+  double velocity_y = 5;  // m/s
+  double velocity_z = 6;  // m/s
+  double temperature = 7;  // Celsius
+  double battery_level = 8;  // percentage
+  map<string, double> sensors = 9;
+}
+
+// Gravity measurement
+message GravityMeasurement {
+  string measurement_id = 1;
+  string satellite_id = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  galileo.common.GeoLocation location = 4;
+  double gravity_value = 5;  // mGal
+  double uncertainty = 6;
+  string quality_flag = 7;
+  map<string, double> metadata = 8;
+}
+
+// Batch telemetry ingestion
+message IngestTelemetryRequest {
+  repeated SatelliteTelemetry telemetry = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message IngestTelemetryResponse {
+  int32 records_ingested = 1;
+  int32 records_failed = 2;
+  repeated string error_messages = 3;
+  galileo.common.Response response = 4;
+}
+
+// Query telemetry
+message QueryTelemetryRequest {
+  repeated string satellite_ids = 1;
+  galileo.common.TimeRange time_range = 2;
+  galileo.common.PaginationRequest pagination = 3;
+  galileo.common.UserContext user_context = 4;
+}
+
+message QueryTelemetryResponse {
+  repeated SatelliteTelemetry telemetry = 1;
+  galileo.common.PaginationResponse pagination = 2;
+  galileo.common.Response response = 3;
+}
+
+// Ingest gravity measurements
+message IngestGravityRequest {
+  repeated GravityMeasurement measurements = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message IngestGravityResponse {
+  int32 records_ingested = 1;
+  int32 records_failed = 2;
+  repeated string error_messages = 3;
+  galileo.common.Response response = 4;
+}
+
+// Query gravity measurements
+message QueryGravityRequest {
+  repeated string satellite_ids = 1;
+  galileo.common.TimeRange time_range = 2;
+  double min_latitude = 3;
+  double max_latitude = 4;
+  double min_longitude = 5;
+  double max_longitude = 6;
+  string quality_filter = 7;
+  galileo.common.PaginationRequest pagination = 8;
+  galileo.common.UserContext user_context = 9;
+}
+
+message QueryGravityResponse {
+  repeated GravityMeasurement measurements = 1;
+  galileo.common.PaginationResponse pagination = 2;
+  galileo.common.Response response = 3;
+}
+
+// Export data
+message ExportDataRequest {
+  string export_type = 1;  // "telemetry" or "gravity"
+  repeated string satellite_ids = 2;
+  galileo.common.TimeRange time_range = 3;
+  string format = 4;  // "csv", "parquet", "netcdf"
+  galileo.common.UserContext user_context = 5;
+}
+
+message ExportDataResponse {
+  string export_id = 1;
+  string download_url = 2;
+  int64 file_size = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  galileo.common.Response response = 5;
+}
+
+// Data Service
+service DataService {
+  // Telemetry operations
+  rpc IngestTelemetry(IngestTelemetryRequest) returns (IngestTelemetryResponse);
+  rpc QueryTelemetry(QueryTelemetryRequest) returns (QueryTelemetryResponse);
+  rpc StreamTelemetry(QueryTelemetryRequest) returns (stream SatelliteTelemetry);
+
+  // Gravity operations
+  rpc IngestGravity(IngestGravityRequest) returns (IngestGravityResponse);
+  rpc QueryGravity(QueryGravityRequest) returns (QueryGravityResponse);
+  rpc StreamGravity(QueryGravityRequest) returns (stream GravityMeasurement);
+
+  // Export operations
+  rpc ExportData(ExportDataRequest) returns (ExportDataResponse);
+
+  // Health check
+  rpc HealthCheck(galileo.common.HealthCheckRequest) returns (galileo.common.HealthCheckResponse);
+}

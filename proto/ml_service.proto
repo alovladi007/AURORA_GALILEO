@@ -1,0 +1,174 @@
+// ML Service API for model training and prediction
+syntax = "proto3";
+
+package galileo.ml;
+
+import "google/protobuf/timestamp.proto";
+import "proto/common.proto";
+
+// Model metadata
+message Model {
+  string model_id = 1;
+  string name = 2;
+  string version = 3;
+  string model_type = 4;  // "gravity_inversion", "anomaly_detection", "forecasting"
+  string framework = 5;  // "pytorch", "jax", "tensorflow"
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  string status = 8;  // "training", "ready", "deprecated"
+  map<string, string> hyperparameters = 9;
+  map<string, double> metrics = 10;
+  string s3_path = 11;
+}
+
+// Training job
+message TrainingJob {
+  string job_id = 1;
+  string model_id = 2;
+  string dataset_id = 3;
+  map<string, string> hyperparameters = 4;
+  google.protobuf.Timestamp started_at = 5;
+  google.protobuf.Timestamp completed_at = 6;
+  string status = 7;  // "pending", "running", "completed", "failed"
+  double progress = 8;  // 0.0 to 1.0
+  map<string, double> metrics = 9;
+  string error_message = 10;
+}
+
+// Training request
+message TrainModelRequest {
+  string model_name = 1;
+  string model_type = 2;
+  string dataset_id = 3;
+  map<string, string> hyperparameters = 4;
+  int32 num_epochs = 5;
+  int32 batch_size = 6;
+  double learning_rate = 7;
+  galileo.common.UserContext user_context = 8;
+}
+
+message TrainModelResponse {
+  string job_id = 1;
+  string model_id = 2;
+  string status = 3;
+  galileo.common.Response response = 4;
+}
+
+// Get training status
+message GetTrainingStatusRequest {
+  string job_id = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message GetTrainingStatusResponse {
+  TrainingJob job = 1;
+  galileo.common.Response response = 2;
+}
+
+// Prediction request
+message PredictRequest {
+  string model_id = 1;
+  repeated double input_features = 2;
+  map<string, string> options = 3;
+  galileo.common.UserContext user_context = 4;
+}
+
+message PredictResponse {
+  repeated double predictions = 1;
+  repeated double confidence_scores = 2;
+  map<string, double> metadata = 3;
+  galileo.common.Response response = 4;
+}
+
+// Batch prediction
+message BatchPredictRequest {
+  string model_id = 1;
+  string input_data_url = 2;  // S3 path
+  string output_data_url = 3;  // S3 path
+  int32 batch_size = 4;
+  galileo.common.UserContext user_context = 5;
+}
+
+message BatchPredictResponse {
+  string job_id = 1;
+  int32 total_samples = 2;
+  string status = 3;
+  galileo.common.Response response = 4;
+}
+
+// Model deployment
+message DeployModelRequest {
+  string model_id = 1;
+  string deployment_name = 2;
+  int32 num_replicas = 3;
+  string instance_type = 4;
+  map<string, string> environment = 5;
+  galileo.common.UserContext user_context = 6;
+}
+
+message DeployModelResponse {
+  string deployment_id = 1;
+  string endpoint_url = 2;
+  string status = 3;
+  galileo.common.Response response = 4;
+}
+
+// Model evaluation
+message EvaluateModelRequest {
+  string model_id = 1;
+  string test_dataset_id = 2;
+  repeated string metrics = 3;  // "mse", "mae", "r2", etc.
+  galileo.common.UserContext user_context = 4;
+}
+
+message EvaluateModelResponse {
+  map<string, double> metrics = 1;
+  string report_url = 2;
+  galileo.common.Response response = 3;
+}
+
+// List models
+message ListModelsRequest {
+  string model_type = 1;
+  string status = 2;
+  galileo.common.PaginationRequest pagination = 3;
+  galileo.common.UserContext user_context = 4;
+}
+
+message ListModelsResponse {
+  repeated Model models = 1;
+  galileo.common.PaginationResponse pagination = 2;
+  galileo.common.Response response = 3;
+}
+
+// Delete model
+message DeleteModelRequest {
+  string model_id = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message DeleteModelResponse {
+  bool success = 1;
+  galileo.common.Response response = 2;
+}
+
+// ML Service
+service MLService {
+  // Training operations
+  rpc TrainModel(TrainModelRequest) returns (TrainModelResponse);
+  rpc GetTrainingStatus(GetTrainingStatusRequest) returns (GetTrainingStatusResponse);
+  rpc StreamTrainingLogs(GetTrainingStatusRequest) returns (stream TrainingJob);
+
+  // Prediction operations
+  rpc Predict(PredictRequest) returns (PredictResponse);
+  rpc BatchPredict(BatchPredictRequest) returns (BatchPredictResponse);
+
+  // Model management
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+  rpc DeployModel(DeployModelRequest) returns (DeployModelResponse);
+  rpc EvaluateModel(EvaluateModelRequest) returns (EvaluateModelResponse);
+  rpc DeleteModel(DeleteModelRequest) returns (DeleteModelResponse);
+
+  // Health check
+  rpc HealthCheck(galileo.common.HealthCheckRequest) returns (galileo.common.HealthCheckResponse);
+}

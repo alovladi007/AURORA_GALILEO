@@ -1,0 +1,170 @@
+// Inversion Service API for gravity field inversion
+syntax = "proto3";
+
+package galileo.inversion;
+
+import "google/protobuf/timestamp.proto";
+import "proto/common.proto";
+
+// Inversion parameters
+message InversionParameters {
+  string method = 1;  // "least_squares", "bayesian", "neural_network"
+  int32 max_iterations = 2;
+  double tolerance = 3;
+  double regularization_lambda = 4;
+  string prior_model = 5;
+  map<string, double> constraints = 6;
+  bool use_gpu = 7;
+}
+
+// Grid specification
+message GridSpec {
+  double min_latitude = 1;
+  double max_latitude = 2;
+  double min_longitude = 3;
+  double max_longitude = 4;
+  double min_depth = 5;  // km
+  double max_depth = 6;  // km
+  int32 num_lat_points = 7;
+  int32 num_lon_points = 8;
+  int32 num_depth_points = 9;
+}
+
+// Inversion job
+message InversionJob {
+  string job_id = 1;
+  string user_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp started_at = 4;
+  google.protobuf.Timestamp completed_at = 5;
+  string status = 6;  // "queued", "running", "completed", "failed", "cancelled"
+  double progress = 7;  // 0.0 to 1.0
+  InversionParameters parameters = 8;
+  GridSpec grid = 9;
+  int32 num_data_points = 10;
+  double rms_residual = 11;
+  string result_url = 12;
+  string error_message = 13;
+  map<string, double> metrics = 14;
+}
+
+// Start inversion
+message StartInversionRequest {
+  string name = 1;
+  string description = 2;
+  repeated string measurement_ids = 3;
+  InversionParameters parameters = 4;
+  GridSpec grid = 5;
+  galileo.common.UserContext user_context = 6;
+}
+
+message StartInversionResponse {
+  string job_id = 1;
+  string status = 2;
+  google.protobuf.Timestamp estimated_completion = 3;
+  galileo.common.Response response = 4;
+}
+
+// Get inversion status
+message GetInversionStatusRequest {
+  string job_id = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message GetInversionStatusResponse {
+  InversionJob job = 1;
+  galileo.common.Response response = 2;
+}
+
+// Cancel inversion
+message CancelInversionRequest {
+  string job_id = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message CancelInversionResponse {
+  bool success = 1;
+  galileo.common.Response response = 2;
+}
+
+// List inversions
+message ListInversionsRequest {
+  string status = 1;
+  galileo.common.TimeRange time_range = 2;
+  galileo.common.PaginationRequest pagination = 3;
+  galileo.common.UserContext user_context = 4;
+}
+
+message ListInversionsResponse {
+  repeated InversionJob jobs = 1;
+  galileo.common.PaginationResponse pagination = 2;
+  galileo.common.Response response = 3;
+}
+
+// Get inversion results
+message GetInversionResultsRequest {
+  string job_id = 1;
+  string format = 2;  // "netcdf", "geotiff", "csv"
+  galileo.common.UserContext user_context = 3;
+}
+
+message GetInversionResultsResponse {
+  string download_url = 1;
+  int64 file_size = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  galileo.common.Response response = 4;
+}
+
+// Density model from inversion
+message DensityModel {
+  string model_id = 1;
+  string job_id = 2;
+  GridSpec grid = 3;
+  repeated double density_values = 4;  // kg/m^3, flattened array
+  repeated double uncertainty_values = 5;
+  double rms_residual = 6;
+  map<string, double> statistics = 7;
+}
+
+// Get density model
+message GetDensityModelRequest {
+  string job_id = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message GetDensityModelResponse {
+  DensityModel model = 1;
+  galileo.common.Response response = 2;
+}
+
+// Compare inversions
+message CompareInversionsRequest {
+  repeated string job_ids = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message CompareInversionsResponse {
+  map<string, double> comparison_metrics = 1;
+  string report_url = 2;
+  galileo.common.Response response = 3;
+}
+
+// Inversion Service
+service InversionService {
+  // Job management
+  rpc StartInversion(StartInversionRequest) returns (StartInversionResponse);
+  rpc GetInversionStatus(GetInversionStatusRequest) returns (GetInversionStatusResponse);
+  rpc CancelInversion(CancelInversionRequest) returns (CancelInversionResponse);
+  rpc ListInversions(ListInversionsRequest) returns (ListInversionsResponse);
+
+  // Results
+  rpc GetInversionResults(GetInversionResultsRequest) returns (GetInversionResultsResponse);
+  rpc GetDensityModel(GetDensityModelRequest) returns (GetDensityModelResponse);
+  rpc CompareInversions(CompareInversionsRequest) returns (CompareInversionsResponse);
+
+  // Streaming
+  rpc StreamInversionProgress(GetInversionStatusRequest) returns (stream InversionJob);
+
+  // Health check
+  rpc HealthCheck(galileo.common.HealthCheckRequest) returns (galileo.common.HealthCheckResponse);
+}

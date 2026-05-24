@@ -1,0 +1,37 @@
+version: v1
+managed:
+  enabled: true
+  go_package_prefix:
+    default: github.com/galileo/proto/gen/go
+plugins:
+  # Python gRPC
+  - plugin: buf.build/protocolbuffers/python
+    out: gen/python
+    opt:
+      - paths=source_relative
+  - plugin: buf.build/grpc/python
+    out: gen/python
+    opt:
+      - paths=source_relative
+
+  # Go gRPC
+  - plugin: buf.build/protocolbuffers/go
+    out: gen/go
+    opt:
+      - paths=source_relative
+  - plugin: buf.build/grpc/go
+    out: gen/go
+    opt:
+      - paths=source_relative
+
+  # TypeScript for frontend
+  - plugin: buf.build/connectrpc/es
+    out: gen/typescript
+    opt:
+      - target=ts
+
+  # Documentation
+  - plugin: buf.build/bufbuild/doc
+    out: docs/api
+    opt:
+      - template=html,index.html

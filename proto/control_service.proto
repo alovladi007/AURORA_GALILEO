@@ -1,0 +1,191 @@
+// Control Service API for satellite operations
+syntax = "proto3";
+
+package galileo.control;
+
+import "google/protobuf/timestamp.proto";
+import "proto/common.proto";
+
+// Satellite information
+message Satellite {
+  string satellite_id = 1;
+  string name = 2;
+  string mission = 3;
+  google.protobuf.Timestamp launch_date = 4;
+  string status = 5;  // "active", "standby", "maintenance", "decommissioned"
+  galileo.common.GeoLocation current_location = 6;
+  double battery_level = 7;
+  map<string, string> metadata = 8;
+}
+
+// Command to satellite
+message SatelliteCommand {
+  string command_id = 1;
+  string satellite_id = 2;
+  string command_type = 3;  // "maneuver", "calibration", "data_collection", "power_mode"
+  map<string, string> parameters = 4;
+  google.protobuf.Timestamp scheduled_time = 5;
+  int32 priority = 6;  // 1-10, 10 is highest
+  galileo.common.UserContext user_context = 7;
+}
+
+// Command execution result
+message CommandResult {
+  string command_id = 1;
+  string status = 2;  // "pending", "sent", "acknowledged", "executed", "failed"
+  google.protobuf.Timestamp sent_at = 3;
+  google.protobuf.Timestamp executed_at = 4;
+  string result_message = 5;
+  map<string, string> telemetry = 6;
+}
+
+// Send command
+message SendCommandRequest {
+  SatelliteCommand command = 1;
+  bool wait_for_acknowledgment = 2;
+  int32 timeout_seconds = 3;
+}
+
+message SendCommandResponse {
+  string command_id = 1;
+  string status = 2;
+  galileo.common.Response response = 3;
+}
+
+// Get command status
+message GetCommandStatusRequest {
+  string command_id = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message GetCommandStatusResponse {
+  CommandResult result = 1;
+  galileo.common.Response response = 2;
+}
+
+// List satellites
+message ListSatellitesRequest {
+  string status = 1;
+  string mission = 2;
+  galileo.common.UserContext user_context = 3;
+}
+
+message ListSatellitesResponse {
+  repeated Satellite satellites = 1;
+  galileo.common.Response response = 2;
+}
+
+// Get satellite status
+message GetSatelliteStatusRequest {
+  string satellite_id = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message GetSatelliteStatusResponse {
+  Satellite satellite = 1;
+  map<string, double> real_time_telemetry = 2;
+  galileo.common.Response response = 3;
+}
+
+// Orbit prediction
+message OrbitPrediction {
+  string satellite_id = 1;
+  google.protobuf.Timestamp time = 2;
+  galileo.common.GeoLocation predicted_location = 3;
+  double velocity_magnitude = 4;
+  double altitude = 5;
+  double ground_track_angle = 6;
+}
+
+// Get orbit prediction
+message GetOrbitPredictionRequest {
+  string satellite_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  int32 time_step_seconds = 4;
+  galileo.common.UserContext user_context = 5;
+}
+
+message GetOrbitPredictionResponse {
+  repeated OrbitPrediction predictions = 1;
+  galileo.common.Response response = 2;
+}
+
+// Mission planning
+message MissionPlan {
+  string plan_id = 1;
+  string name = 2;
+  string description = 3;
+  repeated string satellite_ids = 4;
+  google.protobuf.Timestamp start_time = 5;
+  google.protobuf.Timestamp end_time = 6;
+  repeated SatelliteCommand commands = 7;
+  string status = 8;  // "draft", "approved", "executing", "completed"
+  galileo.common.UserContext created_by = 9;
+}
+
+// Create mission plan
+message CreateMissionPlanRequest {
+  string name = 1;
+  string description = 2;
+  repeated string satellite_ids = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
+  galileo.common.UserContext user_context = 6;
+}
+
+message CreateMissionPlanResponse {
+  string plan_id = 1;
+  galileo.common.Response response = 2;
+}
+
+// Execute mission plan
+message ExecuteMissionPlanRequest {
+  string plan_id = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message ExecuteMissionPlanResponse {
+  bool success = 1;
+  int32 commands_scheduled = 2;
+  galileo.common.Response response = 3;
+}
+
+// Emergency stop
+message EmergencyStopRequest {
+  string satellite_id = 1;
+  string reason = 2;
+  galileo.common.UserContext user_context = 3;
+}
+
+message EmergencyStopResponse {
+  bool success = 1;
+  string status = 2;
+  galileo.common.Response response = 3;
+}
+
+// Control Service
+service ControlService {
+  // Satellite operations
+  rpc ListSatellites(ListSatellitesRequest) returns (ListSatellitesResponse);
+  rpc GetSatelliteStatus(GetSatelliteStatusRequest) returns (GetSatelliteStatusResponse);
+  rpc StreamSatelliteStatus(GetSatelliteStatusRequest) returns (stream GetSatelliteStatusResponse);
+
+  // Command execution
+  rpc SendCommand(SendCommandRequest) returns (SendCommandResponse);
+  rpc GetCommandStatus(GetCommandStatusRequest) returns (GetCommandStatusResponse);
+  rpc StreamCommandResults(GetCommandStatusRequest) returns (stream CommandResult);
+
+  // Orbit prediction
+  rpc GetOrbitPrediction(GetOrbitPredictionRequest) returns (GetOrbitPredictionResponse);
+
+  // Mission planning
+  rpc CreateMissionPlan(CreateMissionPlanRequest) returns (CreateMissionPlanResponse);
+  rpc ExecuteMissionPlan(ExecuteMissionPlanRequest) returns (ExecuteMissionPlanResponse);
+
+  // Emergency operations
+  rpc EmergencyStop(EmergencyStopRequest) returns (EmergencyStopResponse);
+
+  // Health check
+  rpc HealthCheck(galileo.common.HealthCheckRequest) returns (galileo.common.HealthCheckResponse);
+}

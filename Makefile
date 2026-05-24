@@ -162,12 +162,47 @@ docs-deploy: ## Deploy documentation to GitHub Pages
 	mkdocs gh-deploy --force
 	@echo "$(GREEN)✓ Documentation deployed$(NC)"
 
+##@ Protocol Buffers
+
+proto: proto-python proto-docs ## Generate protobuf code and documentation
+	@echo "$(GREEN)✓ Protobuf generation complete$(NC)"
+
+proto-python: ## Generate Python gRPC code
+	@echo "$(BLUE)Generating Python gRPC code...$(NC)"
+	buf generate --template buf.gen.yaml --include-imports
+	@echo "$(GREEN)✓ Python gRPC code generated$(NC)"
+
+proto-lint: ## Lint protobuf files
+	@echo "$(BLUE)Linting protobuf files...$(NC)"
+	buf lint
+	@echo "$(GREEN)✓ Protobuf linting passed$(NC)"
+
+proto-breaking: ## Check for breaking changes
+	@echo "$(BLUE)Checking for breaking changes...$(NC)"
+	buf breaking --against '.git#branch=main'
+	@echo "$(GREEN)✓ No breaking changes$(NC)"
+
+proto-docs: ## Generate protobuf documentation
+	@echo "$(BLUE)Generating protobuf documentation...$(NC)"
+	buf generate --template buf.gen.yaml --include-imports
+	@echo "$(GREEN)✓ Protobuf documentation generated$(NC)"
+
+clean-proto: ## Clean generated protobuf code
+	@echo "$(BLUE)Cleaning generated protobuf code...$(NC)"
+	rm -rf gen/
+	@echo "$(GREEN)✓ Protobuf code cleaned$(NC)"
+
 ##@ Database
 
 db-migrate: ## Run database migrations
 	@echo "$(BLUE)Running migrations...$(NC)"
 	alembic upgrade head
 	@echo "$(GREEN)✓ Migrations applied$(NC)"
+
+db-timescale-init: ## Initialize TimescaleDB
+	@echo "$(BLUE)Initializing TimescaleDB...$(NC)"
+	psql -U galileo_admin -d galileo -f ops/db/timescale_setup.sql
+	@echo "$(GREEN)✓ TimescaleDB initialized$(NC)"
 
 db-reset: ## Reset database (WARNING: deletes all data)
 	@echo "$(RED)WARNING: This will delete all data!$(NC)"
@@ -182,6 +217,53 @@ db-reset: ## Reset database (WARNING: deletes all data)
 
 db-shell: ## Open database shell
 	docker-compose exec db psql -U galileo galileo
+
+##@ Infrastructure
+
+tf-init: ## Initialize Terraform
+	@echo "$(BLUE)Initializing Terraform...$(NC)"
+	cd deploy/terraform/environments/prod && terraform init
+	@echo "$(GREEN)✓ Terraform initialized$(NC)"
+
+tf-plan: ## Plan Terraform changes
+	@echo "$(BLUE)Planning Terraform changes...$(NC)"
+	cd deploy/terraform/environments/prod && terraform plan
+	@echo "$(GREEN)✓ Terraform plan complete$(NC)"
+
+tf-apply: ## Apply Terraform changes
+	@echo "$(BLUE)Applying Terraform changes...$(NC)"
+	cd deploy/terraform/environments/prod && terraform apply
+	@echo "$(GREEN)✓ Terraform apply complete$(NC)"
+
+tf-destroy: ## Destroy Terraform infrastructure
+	@echo "$(RED)WARNING: This will destroy infrastructure!$(NC)"
+	@read -p "Are you sure? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		cd deploy/terraform/environments/prod && terraform destroy; \
+		echo "$(GREEN)✓ Infrastructure destroyed$(NC)"; \
+	fi
+
+k8s-deploy: ## Deploy to Kubernetes with Helm
+	@echo "$(BLUE)Deploying to Kubernetes...$(NC)"
+	helm upgrade --install galileo deploy/helm/galileo \
+		--namespace default \
+		--create-namespace
+	@echo "$(GREEN)✓ Kubernetes deployment complete$(NC)"
+
+k8s-delete: ## Delete Kubernetes deployment
+	@echo "$(BLUE)Deleting Kubernetes deployment...$(NC)"
+	helm uninstall galileo --namespace default
+	@echo "$(GREEN)✓ Kubernetes deployment deleted$(NC)"
+
+k8s-status: ## Check Kubernetes status
+	@echo "$(BLUE)Checking Kubernetes status...$(NC)"
+	kubectl get pods,svc,ingress -n default
+	@echo "$(GREEN)✓ Kubernetes status displayed$(NC)"
+
+k8s-logs: ## View Kubernetes pod logs
+	@echo "$(BLUE)Kubernetes pod logs:$(NC)"
+	kubectl logs -n default -l app=galileo-api --tail=100 -f
 
 ##@ Utilities
 
