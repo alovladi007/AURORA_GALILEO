@@ -109,6 +109,140 @@ async def prometheus_middleware(request: Request, call_next):
 
     return response
 
+
+# ============================================================================
+# Security Headers Middleware
+# ============================================================================
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Add security headers to all responses"""
+    response = await call_next(request)
+
+    # Content Security Policy - restrict resource loading
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' ws: wss:; "
+        "frame-ancestors 'none';"
+    )
+
+    # HTTP Strict Transport Security - enforce HTTPS
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    # X-Frame-Options - prevent clickjacking
+    response.headers["X-Frame-Options"] = "DENY"
+
+    # X-Content-Type-Options - prevent MIME sniffing
+    response.headers["X-Content-Type-Options"] = "nosniff"
+
+    # X-XSS-Protection - legacy XSS protection
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+
+    # Referrer-Policy - control referrer information
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    # Permissions-Policy - restrict browser features
+    response.headers["Permissions-Policy"] = (
+        "geolocation=(), "
+        "microphone=(), "
+        "camera=(), "
+        "payment=(), "
+        "usb=(), "
+        "magnetometer=(), "
+        "gyroscope=(), "
+        "accelerometer=()"
+    )
+
+    return response
+
+
+# ============================================================================
+# Production Secrets Validation
+# ============================================================================
+
+def validate_production_secrets():
+    """Validate that production secrets are properly configured"""
+    if os.getenv("ENVIRONMENT") == "production":
+        required_secrets = [
+            "DATABASE_URL",
+            "REDIS_URL",
+            "SECRET_KEY",
+            "JWT_SECRET_KEY",
+            "MINIO_ROOT_USER",
+            "MINIO_ROOT_PASSWORD",
+        ]
+
+        missing_secrets = []
+        weak_secrets = []
+
+        for secret in required_secrets:
+            value = os.getenv(secret)
+            if not value:
+                missing_secrets.append(secret)
+            elif secret in ["SECRET_KEY", "JWT_SECRET_KEY"] and len(value) < 32:
+                weak_secrets.append(f"{secret} (less than 32 characters)")
+
+        if missing_secrets:
+            raise RuntimeError(
+                f"Production environment requires these secrets to be set: {', '.join(missing_secrets)}"
+            )
+
+        if weak_secrets:
+            raise RuntimeError(
+                f"Production environment requires stronger secrets: {', '.join(weak_secrets)}"
+            )
+
+
+# ============================================================================
+# Startup and Shutdown Event Handlers
+# ============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Application startup tasks"""
+    print("🚀 GALILEO Platform API starting up...")
+
+    # Validate production secrets
+    try:
+        validate_production_secrets()
+        print("✓ Production secrets validated")
+    except RuntimeError as e:
+        if os.getenv("ENVIRONMENT") == "production":
+            print(f"✗ Secret validation failed: {e}")
+            raise
+        else:
+            print(f"⚠ Secret validation skipped (non-production): {e}")
+
+    # Initialize connections (add database, redis, etc. initialization here)
+    print("✓ Application initialized successfully")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Graceful shutdown handler"""
+    print("🛑 GALILEO Platform API shutting down...")
+
+    # Close WebSocket connections gracefully
+    for channel, connections in ws_manager.active_connections.items():
+        for ws in list(connections):
+            try:
+                await ws.close(code=1001, reason="Server shutting down")
+            except Exception:
+                pass
+
+    # Close database connections (add your connection pool cleanup here)
+    # await database.disconnect()
+
+    # Close redis connections
+    # await redis_pool.close()
+
+    print("✓ Graceful shutdown completed")
+
+
 # ============================================================================
 # WebSocket Connection Manager
 # ============================================================================

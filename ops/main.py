@@ -46,11 +46,55 @@ AUTH_ENABLED = os.getenv("AUTH_ENABLED", "true").lower() == "true"
 CORS_ORIGINS_STR = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")
 CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_STR.split(",") if origin.strip()]
 
+
+def validate_production_secrets():
+    """Validate that production secrets are properly configured"""
+    if os.getenv("ENVIRONMENT") == "production":
+        required_secrets = [
+            "DATABASE_URL",
+            "REDIS_URL",
+            "JWT_SECRET_KEY",
+            "MINIO_ROOT_USER",
+            "MINIO_ROOT_PASSWORD",
+        ]
+
+        missing_secrets = []
+        weak_secrets = []
+
+        for secret in required_secrets:
+            value = os.getenv(secret)
+            if not value:
+                missing_secrets.append(secret)
+            elif secret == "JWT_SECRET_KEY" and len(value) < 32:
+                weak_secrets.append(f"{secret} (less than 32 characters)")
+
+        if missing_secrets:
+            raise RuntimeError(
+                f"Production environment requires these secrets to be set: {', '.join(missing_secrets)}"
+            )
+
+        if weak_secrets:
+            raise RuntimeError(
+                f"Production environment requires stronger secrets: {', '.join(weak_secrets)}"
+            )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
     logger.info("Starting Gravity Processing API...")
-    
+
+    # Validate production secrets
+    try:
+        validate_production_secrets()
+        logger.info("✓ Production secrets validated")
+    except RuntimeError as e:
+        if os.getenv("ENVIRONMENT") == "production":
+            logger.error(f"✗ Secret validation failed: {e}")
+            raise
+        else:
+            logger.warning(f"⚠ Secret validation skipped (non-production): {e}")
+
     # Initialize MinIO buckets
     minio_client = get_minio_client()
     buckets = ["raw-data", "processed-data", "products", "temp"]
@@ -82,6 +126,54 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Security headers middleware
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Add security headers to all responses"""
+    response = await call_next(request)
+
+    # Content Security Policy
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' ws: wss:; "
+        "frame-ancestors 'none';"
+    )
+
+    # HTTP Strict Transport Security
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    # X-Frame-Options
+    response.headers["X-Frame-Options"] = "DENY"
+
+    # X-Content-Type-Options
+    response.headers["X-Content-Type-Options"] = "nosniff"
+
+    # X-XSS-Protection
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+
+    # Referrer-Policy
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    # Permissions-Policy
+    response.headers["Permissions-Policy"] = (
+        "geolocation=(), "
+        "microphone=(), "
+        "camera=(), "
+        "payment=(), "
+        "usb=(), "
+        "magnetometer=(), "
+        "gyroscope=(), "
+        "accelerometer=()"
+    )
+
+    return response
+
 
 # Add custom audit logging middleware
 app.middleware("http")(audit_log_middleware)
