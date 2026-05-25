@@ -4,7 +4,7 @@ syntax = "proto3";
 package galileo.ml;
 
 import "google/protobuf/timestamp.proto";
-import "proto/common.proto";
+import "common.proto";
 
 // Model metadata
 message Model {

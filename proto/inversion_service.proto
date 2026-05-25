@@ -4,7 +4,7 @@ syntax = "proto3";
 package galileo.inversion;
 
 import "google/protobuf/timestamp.proto";
-import "proto/common.proto";
+import "common.proto";
 
 // Inversion parameters
 message InversionParameters {
