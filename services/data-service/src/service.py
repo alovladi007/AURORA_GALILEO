@@ -7,10 +7,10 @@ from datetime import datetime
 from typing import Iterator
 import logging
 
-from gen import data_service_pb2, data_service_pb2_grpc, common_pb2
+from src.gen import data_service_pb2, data_service_pb2_grpc, common_pb2
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from .database import db, SatelliteTelemetryModel, GravityMeasurementModel
+from src.database import db, SatelliteTelemetryModel, GravityMeasurementModel
 
 logger = logging.getLogger(__name__)
 

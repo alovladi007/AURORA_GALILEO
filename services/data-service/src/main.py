@@ -9,10 +9,10 @@ import signal
 import sys
 import time
 
-from gen import data_service_pb2_grpc
-from .service import DataServicer
-from .database import db
-from .config import settings
+from src.gen import data_service_pb2_grpc
+from src.service import DataServicer
+from src.database import db
+from src.config import settings
 
 # Configure logging
 logging.basicConfig(
