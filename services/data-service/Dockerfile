@@ -8,12 +8,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
-COPY requirements.txt .
+COPY services/data-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application
-COPY src/ ./src/
+# Copy proto files from root
 COPY proto/ ./proto/
+
+# Copy application
+COPY services/data-service/src/ ./src/
 
 # Generate protobuf code
 RUN python -m grpc_tools.protoc \
