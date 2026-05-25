@@ -27,6 +27,9 @@ RUN python -m grpc_tools.protoc \
 # Create __init__.py files
 RUN touch src/gen/__init__.py
 
+# Add gen directory to PYTHONPATH so imports work
+ENV PYTHONPATH="/app/src/gen:${PYTHONPATH}"
+
 EXPOSE 50051
 
 CMD ["python", "-m", "src.main"]
