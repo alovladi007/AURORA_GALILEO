@@ -39,8 +39,8 @@ services:
   # Data Service
   data-service:
     build:
-      context: ./services/data-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/data-service/Dockerfile
     expose:
       - "50051"
     environment:
@@ -74,8 +74,8 @@ services:
   # ML Service
   ml-service:
     build:
-      context: ./services/ml-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/ml-service/Dockerfile
     expose:
       - "50052"
     environment:
@@ -113,8 +113,8 @@ services:
   # Inversion Service
   inversion-service:
     build:
-      context: ./services/inversion-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/inversion-service/Dockerfile
     expose:
       - "50053"
     environment:
@@ -149,8 +149,8 @@ services:
   # Control Service
   control-service:
     build:
-      context: ./services/control-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/control-service/Dockerfile
     expose:
       - "50054"
     environment:
