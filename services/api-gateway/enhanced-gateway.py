@@ -12,16 +12,20 @@ import logging
 import sys
 import os
 
-# Add path for proto imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../data-service/src/gen'))
-
 try:
     import grpc
     from google.protobuf.timestamp_pb2 import Timestamp
-    # Import Data Service protos
-    import data_service_pb2
-    import data_service_pb2_grpc
-    import common_pb2
+    # Import Data Service protos (generated in /app/gen or ../data-service/src/gen for local)
+    try:
+        import data_service_pb2
+        import data_service_pb2_grpc
+        import common_pb2
+    except ImportError:
+        # Try local development path
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../data-service/src/gen'))
+        import data_service_pb2
+        import data_service_pb2_grpc
+        import common_pb2
     GRPC_AVAILABLE = True
 except ImportError as e:
     logging.warning(f"gRPC imports failed: {e}. Using mock data.")
