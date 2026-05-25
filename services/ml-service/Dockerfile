@@ -18,6 +18,9 @@ COPY proto/ ./proto/
 # Copy application
 COPY services/ml-service/src/ ./src/
 
+# Create gen directory for protobuf output
+RUN mkdir -p src/gen
+
 # Generate protobuf code
 RUN python -m grpc_tools.protoc \
     --proto_path=proto \
