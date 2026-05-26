@@ -152,6 +152,68 @@ message DeleteModelResponse {
   galileo.common.Response response = 2;
 }
 
+// Simplified messages for mock implementation
+message TrainingRequest {
+  string model_type = 1;
+  map<string, string> config = 2;
+}
+
+message TrainingResponse {
+  string job_id = 1;
+  string status = 2;
+  string message = 3;
+  double estimated_time = 4;
+}
+
+message TrainingStatusRequest {
+  string job_id = 1;
+}
+
+message TrainingStatusResponse {
+  string job_id = 1;
+  string status = 2;
+  double progress = 3;
+  int32 current_epoch = 4;
+  int32 total_epochs = 5;
+  double loss = 6;
+  string message = 7;
+}
+
+message ListModelsRequest {
+  string filter_type = 1;
+}
+
+message ModelInfo {
+  string model_id = 1;
+  string model_type = 2;
+  string version = 3;
+  string status = 4;
+  google.protobuf.Timestamp created_at = 5;
+  map<string, double> metrics = 6;
+}
+
+message GetModelRequest {
+  string model_id = 1;
+}
+
+message PredictionInput {
+  map<string, double> features = 1;
+}
+
+message PredictionResult {
+  map<string, double> prediction = 1;
+  double confidence = 2;
+}
+
+message PredictionRequest {
+  string model_id = 1;
+  repeated PredictionInput inputs = 2;
+}
+
+message PredictionResponse {
+  repeated PredictionResult predictions = 1;
+}
+
 // ML Service
 service MLService {
   // Training operations
@@ -170,5 +232,15 @@ service MLService {
   rpc DeleteModel(DeleteModelRequest) returns (DeleteModelResponse);
 
   // Health check
+  rpc HealthCheck(galileo.common.HealthCheckRequest) returns (galileo.common.HealthCheckResponse);
+}
+
+// Additional service for mock implementation compatibility
+service MLServiceMock {
+  rpc TrainModel(TrainingRequest) returns (TrainingResponse);
+  rpc GetTrainingStatus(TrainingStatusRequest) returns (TrainingStatusResponse);
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+  rpc GetModel(GetModelRequest) returns (ModelInfo);
+  rpc Predict(PredictionRequest) returns (PredictionResponse);
   rpc HealthCheck(galileo.common.HealthCheckRequest) returns (galileo.common.HealthCheckResponse);
 }
