@@ -46,6 +46,13 @@ message GeoLocation {
   double altitude = 3;  // meters
 }
 
+// 3D Vector
+message Vector3 {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
 // Time range
 message TimeRange {
   google.protobuf.Timestamp start_time = 1;

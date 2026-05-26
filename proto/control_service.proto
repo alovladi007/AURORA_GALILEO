@@ -183,17 +183,6 @@ message MissionPlanQuery {
   string plan_id = 1;
 }
 
-message MissionPlan {
-  string plan_id = 1;
-  string mission_name = 2;
-  repeated string satellite_ids = 3;
-  google.protobuf.Timestamp start_time = 4;
-  google.protobuf.Timestamp end_time = 5;
-  string status = 6;
-  repeated string objectives = 7;
-  map<string, string> metadata = 8;
-}
-
 message ManeuverRequest {
   string satellite_id = 1;
   string maneuver_type = 2;
@@ -271,8 +260,7 @@ service ControlService {
   // Health check
   rpc HealthCheck(galileo.common.HealthCheckRequest) returns (galileo.common.HealthCheckResponse);
 
-  // Mock simplified methods
-  rpc CreateMissionPlan(MissionPlanRequest) returns (MissionPlanResponse);
+  // Mock simplified methods (non-duplicate)
   rpc GetMissionPlan(MissionPlanQuery) returns (MissionPlan);
   rpc ExecuteManeuver(ManeuverRequest) returns (galileo.common.Response);
   rpc PropagateOrbit(PropagationRequest) returns (PropagationResponse);
