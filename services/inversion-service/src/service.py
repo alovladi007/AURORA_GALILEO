@@ -182,12 +182,11 @@ class InversionServicer(inversion_service_pb2_grpc.InversionServiceServicer):
         """Health check endpoint"""
         try:
             return common_pb2.HealthCheckResponse(
-                status=common_pb2.HealthCheckResponse.SERVING,
-                message="Inversion Service is healthy"
+                status=common_pb2.HealthCheckResponse.SERVING
             )
         except Exception as e:
             logger.error(f"Health check failed: {e}")
             return common_pb2.HealthCheckResponse(
                 status=common_pb2.HealthCheckResponse.NOT_SERVING,
-                message=f"Unhealthy: {str(e)}"
+                details={"error": str(e)}
             )
