@@ -164,6 +164,88 @@ message EmergencyStopResponse {
   galileo.common.Response response = 3;
 }
 
+// Simplified mock messages
+message MissionPlanRequest {
+  string mission_name = 1;
+  repeated string satellite_ids = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;
+  repeated string objectives = 5;
+}
+
+message MissionPlanResponse {
+  string plan_id = 1;
+  string status = 2;
+  string message = 3;
+}
+
+message MissionPlanQuery {
+  string plan_id = 1;
+}
+
+message MissionPlan {
+  string plan_id = 1;
+  string mission_name = 2;
+  repeated string satellite_ids = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
+  string status = 6;
+  repeated string objectives = 7;
+  map<string, string> metadata = 8;
+}
+
+message ManeuverRequest {
+  string satellite_id = 1;
+  string maneuver_type = 2;
+  galileo.common.Vector3 delta_v = 3;
+  google.protobuf.Timestamp execution_time = 4;
+}
+
+message PropagationRequest {
+  string satellite_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  int32 duration = 3;
+  int32 timestep = 4;
+  OrbitState initial_state = 5;
+}
+
+message OrbitState {
+  google.protobuf.Timestamp timestamp = 1;
+  galileo.common.Vector3 position = 2;
+  galileo.common.Vector3 velocity = 3;
+}
+
+message PropagationResponse {
+  string satellite_id = 1;
+  repeated OrbitState states = 2;
+  string propagator_type = 3;
+  string message = 4;
+}
+
+message SimulationRequest {
+  string mission_name = 1;
+  map<string, string> config = 2;
+}
+
+message SimulationResponse {
+  string job_id = 1;
+  string status = 2;
+  string message = 3;
+  double estimated_time = 4;
+}
+
+message SimulationStatusRequest {
+  string job_id = 1;
+}
+
+message SimulationStatusResponse {
+  string job_id = 1;
+  string status = 2;
+  double progress = 3;
+  google.protobuf.Timestamp current_time = 4;
+  string message = 5;
+}
+
 // Control Service
 service ControlService {
   // Satellite operations
@@ -188,4 +270,12 @@ service ControlService {
 
   // Health check
   rpc HealthCheck(galileo.common.HealthCheckRequest) returns (galileo.common.HealthCheckResponse);
+
+  // Mock simplified methods
+  rpc CreateMissionPlan(MissionPlanRequest) returns (MissionPlanResponse);
+  rpc GetMissionPlan(MissionPlanQuery) returns (MissionPlan);
+  rpc ExecuteManeuver(ManeuverRequest) returns (galileo.common.Response);
+  rpc PropagateOrbit(PropagationRequest) returns (PropagationResponse);
+  rpc SimulateMission(SimulationRequest) returns (SimulationResponse);
+  rpc GetSimulationStatus(SimulationStatusRequest) returns (SimulationStatusResponse);
 }

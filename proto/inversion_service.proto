@@ -149,6 +149,59 @@ message CompareInversionsResponse {
   galileo.common.Response response = 3;
 }
 
+// Simplified mock messages
+message InversionRequest {
+  string inversion_type = 1;
+  map<string, string> config = 2;
+  map<string, string> data_query = 3;
+}
+
+message InversionResponse {
+  string job_id = 1;
+  string status = 2;
+  string message = 3;
+  double estimated_time = 4;
+}
+
+message InversionStatusRequest {
+  string job_id = 1;
+}
+
+message InversionStatusResponse {
+  string job_id = 1;
+  string status = 2;
+  double progress = 3;
+  int32 current_iteration = 4;
+  int32 total_iterations = 5;
+  double residual = 6;
+  string message = 7;
+}
+
+message InversionResultRequest {
+  string job_id = 1;
+}
+
+message InversionResult {
+  string job_id = 1;
+  string inversion_type = 2;
+  string status = 3;
+  google.protobuf.Timestamp completed_at = 4;
+  int32 iterations = 5;
+  double final_residual = 6;
+  bool convergence_achieved = 7;
+  string gravity_field_url = 8;
+  string coefficients_url = 9;
+  map<string, string> metadata = 10;
+}
+
+message InversionJobInfo {
+  string job_id = 1;
+  string inversion_type = 2;
+  string status = 3;
+  google.protobuf.Timestamp created_at = 4;
+  double progress = 5;
+}
+
 // Inversion Service
 service InversionService {
   // Job management
@@ -167,4 +220,8 @@ service InversionService {
 
   // Health check
   rpc HealthCheck(galileo.common.HealthCheckRequest) returns (galileo.common.HealthCheckResponse);
+
+  // Mock simplified methods (used by service implementation)
+  rpc RunInversion(InversionRequest) returns (InversionResponse);
+  rpc GetInversionResult(InversionResultRequest) returns (InversionResult);
 }
