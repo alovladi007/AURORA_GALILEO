@@ -10,7 +10,7 @@ services:
       context: .
       dockerfile: services/api-gateway/Dockerfile.simple
     ports:
-      - "8000:8000"
+      - "18000:8000"
     environment:
       - SERVICE_NAME=api-gateway
       - GRPC_DATA_SERVICE_HOST=data-service:50051
