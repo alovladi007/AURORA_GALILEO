@@ -46,7 +46,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # gRPC connection
-DATA_SERVICE_ADDR = "localhost:50051"
+DATA_SERVICE_ADDR = os.getenv("DATA_SERVICE_ADDR", "data-service:50051")
 data_stub = None
 
 def get_data_stub():

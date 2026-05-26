@@ -13,6 +13,7 @@ services:
       - "18000:8000"
     environment:
       - SERVICE_NAME=api-gateway
+      - DATA_SERVICE_ADDR=data-service:50051
       - GRPC_DATA_SERVICE_HOST=data-service:50051
       - GRPC_ML_SERVICE_HOST=ml-service:50052
       - GRPC_INVERSION_SERVICE_HOST=inversion-service:50053
