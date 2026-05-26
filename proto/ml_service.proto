@@ -179,10 +179,6 @@ message TrainingStatusResponse {
   string message = 7;
 }
 
-message ListModelsRequest {
-  string filter_type = 1;
-}
-
 message ModelInfo {
   string model_id = 1;
   string model_type = 2;
