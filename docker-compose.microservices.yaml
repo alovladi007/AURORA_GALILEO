@@ -47,6 +47,7 @@ services:
     environment:
       - SERVICE_NAME=data-service
       - GRPC_PORT=50051
+      - DATABASE_URL=postgresql://galileo:${DB_PASSWORD}@postgres:5432/galileo
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=galileo
