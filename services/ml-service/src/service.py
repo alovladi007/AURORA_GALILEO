@@ -1,14 +1,20 @@
 """
 ML Service gRPC implementation
+
+Runs real model training jobs via the TrainingOrchestrator, tracks epoch-level
+progress, serves predictions from trained models, and exposes a model registry.
 """
 
 import grpc
 import logging
 from datetime import datetime
-from typing import Dict, Any
+
+import numpy as np
 
 from src.gen import ml_service_pb2, ml_service_pb2_grpc, common_pb2
 from google.protobuf.timestamp_pb2 import Timestamp
+
+from src.training_orchestrator import TrainingOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -20,158 +26,160 @@ def datetime_to_timestamp(dt: datetime) -> Timestamp:
     return ts
 
 
+def _mlp_predict(weights, X: np.ndarray) -> np.ndarray:
+    """Forward pass matching training_orchestrator._NumpyMLP."""
+    a1 = np.tanh(X @ weights["W1"] + weights["b1"])
+    return (a1 @ weights["W2"] + weights["b2"]).ravel()
+
+
 class MLServicer(ml_service_pb2_grpc.MLServiceServicer):
-    """ML Service implementation"""
+    """ML Service implementation backed by a real training orchestrator."""
 
     def __init__(self):
-        self.models = {}  # In-memory model registry
-        self.training_jobs = {}  # Track training jobs
+        self.orchestrator = TrainingOrchestrator()
 
     def TrainModel(self, request, context):
-        """Train a new ML model"""
+        """Start a real training job."""
         try:
-            logger.info(f"Training model: {request.model_type}")
+            logger.info("Training model: %s", request.model_type)
+            job = self.orchestrator.start(request.model_type, dict(request.config))
 
-            # Create training job
-            job_id = f"train_{datetime.utcnow().timestamp()}"
-            self.training_jobs[job_id] = {
-                "model_type": request.model_type,
-                "status": "training",
-                "started_at": datetime.utcnow()
-            }
-
-            # In production, this would:
-            # 1. Fetch training data from Data Service
-            # 2. Train the model (PINN, CNN, etc.)
-            # 3. Log to MLflow
-            # 4. Save model artifacts
+            epochs = int(job.config.get("epochs", 200))
+            n_samples = int(job.config.get("n_samples", 2000))
+            estimated = max(2.0, epochs * n_samples * 5e-6)
 
             return ml_service_pb2.TrainingResponse(
-                job_id=job_id,
-                status="training",
-                message=f"Training {request.model_type} model started",
-                estimated_time=3600.0  # Mock: 1 hour
+                job_id=job.job_id,
+                status=job.status,
+                message=f"Training {job.model_type} model started",
+                estimated_time=estimated,
             )
 
         except Exception as e:
-            logger.error(f"Error training model: {e}")
+            logger.error("Error training model: %s", e)
             return ml_service_pb2.TrainingResponse(
                 job_id="",
                 status="failed",
                 message=f"Error: {str(e)}",
-                estimated_time=0.0
+                estimated_time=0.0,
             )
 
     def GetTrainingStatus(self, request, context):
-        """Get status of training job"""
+        """Get real-time training progress."""
         try:
-            job = self.training_jobs.get(request.job_id)
+            job = self.orchestrator.get(request.job_id)
             if not job:
                 return ml_service_pb2.TrainingStatusResponse(
                     job_id=request.job_id,
                     status="not_found",
                     progress=0.0,
-                    message="Training job not found"
+                    message="Training job not found",
                 )
 
-            # Mock progress
             return ml_service_pb2.TrainingStatusResponse(
-                job_id=request.job_id,
-                status=job["status"],
-                progress=0.75,  # Mock: 75% complete
-                current_epoch=750,
-                total_epochs=1000,
-                loss=0.0123,
-                message=f"Training in progress"
+                job_id=job.job_id,
+                status=job.status,
+                progress=job.progress,
+                current_epoch=job.current_epoch,
+                total_epochs=job.total_epochs,
+                loss=job.loss,
+                message=job.message,
             )
 
         except Exception as e:
-            logger.error(f"Error getting training status: {e}")
+            logger.error("Error getting training status: %s", e)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return ml_service_pb2.TrainingStatusResponse()
 
     def ListModels(self, request, context):
-        """List available models"""
+        """List models trained in this session.
+
+        ``ListModelsResponse.models`` is ``repeated Model`` (the full message),
+        so build Model entries here (GetModel returns the simplified ModelInfo).
+        """
         try:
-            # Mock model list
             models = [
-                ml_service_pb2.ModelInfo(
-                    model_id="pinn_001",
-                    model_type="pinn",
+                ml_service_pb2.Model(
+                    model_id=job.model_id,
+                    name=job.model_id,
                     version="1.0.0",
-                    status="trained",
-                    created_at=datetime_to_timestamp(datetime.utcnow()),
-                    metrics={"loss": 0.0123, "accuracy": 0.987}
-                ),
-                ml_service_pb2.ModelInfo(
-                    model_id="cnn_gravity_001",
-                    model_type="cnn",
-                    version="1.0.0",
-                    status="trained",
-                    created_at=datetime_to_timestamp(datetime.utcnow()),
-                    metrics={"loss": 0.0089, "mae": 0.0045}
+                    model_type=job.model_type,
+                    framework="numpy",
+                    created_at=datetime_to_timestamp(job.completed_at or job.created_at),
+                    updated_at=datetime_to_timestamp(job.completed_at or job.created_at),
+                    status="ready",
+                    metrics={k: float(v) for k, v in job.metrics.items()},
                 )
+                for job in self.orchestrator.list_models()
             ]
 
-            logger.info(f"Listing {len(models)} models")
-
-            return ml_service_pb2.ListModelsResponse(
-                models=models
-            )
+            logger.info("Listing %d models", len(models))
+            return ml_service_pb2.ListModelsResponse(models=models)
 
         except Exception as e:
-            logger.error(f"Error listing models: {e}")
+            logger.error("Error listing models: %s", e)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return ml_service_pb2.ListModelsResponse()
 
     def GetModel(self, request, context):
-        """Get model information"""
+        """Get information about a trained model."""
         try:
-            # Mock model info
-            if request.model_id == "pinn_001":
-                return ml_service_pb2.ModelInfo(
-                    model_id="pinn_001",
-                    model_type="pinn",
-                    version="1.0.0",
-                    status="trained",
-                    created_at=datetime_to_timestamp(datetime.utcnow()),
-                    metrics={"loss": 0.0123, "accuracy": 0.987}
-                )
+            job = self.orchestrator.get_model(request.model_id)
+            if not job:
+                context.set_code(grpc.StatusCode.NOT_FOUND)
+                context.set_details(f"Model {request.model_id} not found")
+                return ml_service_pb2.ModelInfo()
 
-            context.set_code(grpc.StatusCode.NOT_FOUND)
-            context.set_details(f"Model {request.model_id} not found")
-            return ml_service_pb2.ModelInfo()
+            return ml_service_pb2.ModelInfo(
+                model_id=job.model_id,
+                model_type=job.model_type,
+                version="1.0.0",
+                status="trained",
+                created_at=datetime_to_timestamp(job.completed_at or job.created_at),
+                metrics={k: float(v) for k, v in job.metrics.items()},
+            )
 
         except Exception as e:
-            logger.error(f"Error getting model: {e}")
+            logger.error("Error getting model: %s", e)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return ml_service_pb2.ModelInfo()
 
     def Predict(self, request, context):
-        """Make predictions using trained model"""
+        """Run inference using a trained model."""
         try:
-            logger.info(f"Prediction request for model {request.model_id}")
+            logger.info("Prediction request for model %s", request.model_id)
+            job = self.orchestrator.get_model(request.model_id)
 
-            # Mock prediction
+            if not job or job.weights is None:
+                context.set_code(grpc.StatusCode.NOT_FOUND)
+                context.set_details(f"Trained model {request.model_id} not available")
+                return ml_service_pb2.PredictionResponse()
+
             predictions = []
             for inp in request.inputs:
-                # Simple mock: return input features as prediction
+                feats = inp.features
+                # Order-stable feature vector; pad/truncate to model input dim.
+                n_in = job.weights["W1"].shape[0]
+                vec = np.array([feats.get(k, 0.0) for k in sorted(feats.keys())], dtype=float)
+                if vec.size < n_in:
+                    vec = np.pad(vec, (0, n_in - vec.size))
+                else:
+                    vec = vec[:n_in]
+                value = float(_mlp_predict(job.weights, vec[None, :])[0])
                 predictions.append(
                     ml_service_pb2.PredictionResult(
-                        prediction={"gravity_anomaly": 0.05, "confidence": 0.95},
-                        confidence=0.95
+                        prediction={"gravity_anomaly": value},
+                        confidence=float(max(0.0, min(1.0, job.metrics.get("val_r2", 0.0)))),
                     )
                 )
 
-            return ml_service_pb2.PredictionResponse(
-                predictions=predictions
-            )
+            return ml_service_pb2.PredictionResponse(predictions=predictions)
 
         except Exception as e:
-            logger.error(f"Error making prediction: {e}")
+            logger.error("Error making prediction: %s", e)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return ml_service_pb2.PredictionResponse()
@@ -183,8 +191,8 @@ class MLServicer(ml_service_pb2_grpc.MLServiceServicer):
                 status=common_pb2.HealthCheckResponse.SERVING
             )
         except Exception as e:
-            logger.error(f"Health check failed: {e}")
+            logger.error("Health check failed: %s", e)
             return common_pb2.HealthCheckResponse(
                 status=common_pb2.HealthCheckResponse.NOT_SERVING,
-                details={"error": str(e)}
+                details={"error": str(e)},
             )

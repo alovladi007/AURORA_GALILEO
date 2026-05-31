@@ -1,14 +1,20 @@
 """
 Inversion Service gRPC implementation
+
+Runs real gravity inversions (Tikhonov, Gauss-Newton, Bayesian MAP) via the
+InversionEngine, tracks job progress, and serializes results to storage.
 """
 
 import grpc
 import logging
 from datetime import datetime
-from typing import List
 
 from src.gen import inversion_service_pb2, inversion_service_pb2_grpc, common_pb2
 from google.protobuf.timestamp_pb2 import Timestamp
+
+from src.inversion_engine import InversionEngine
+from src.result_writer import ResultWriter
+from src.persistence import JobStore
 
 logger = logging.getLogger(__name__)
 
@@ -21,161 +27,187 @@ def datetime_to_timestamp(dt: datetime) -> Timestamp:
 
 
 class InversionServicer(inversion_service_pb2_grpc.InversionServiceServicer):
-    """Inversion Service implementation"""
+    """Inversion Service implementation backed by a real inversion engine."""
 
     def __init__(self):
-        self.inversion_jobs = {}  # Track inversion jobs
+        self.engine = InversionEngine()
+        self.writer = ResultWriter()
+        self.store = JobStore()
+        self._result_urls = {}  # job_id -> {gravity_field_url, coefficients_url}
 
     def RunInversion(self, request, context):
-        """Run gravity inversion"""
+        """Run a gravity inversion using real numerical solvers."""
         try:
-            logger.info(f"Starting inversion: {request.inversion_type}")
+            logger.info("Starting inversion: %s", request.inversion_type)
+            job = self.engine.start(request.inversion_type, dict(request.config))
+            self.store.upsert(job)
 
-            # Create job
-            job_id = f"inv_{datetime.utcnow().timestamp()}"
-            self.inversion_jobs[job_id] = {
-                "inversion_type": request.inversion_type,
-                "status": "running",
-                "started_at": datetime.utcnow()
-            }
-
-            # In production, this would:
-            # 1. Fetch gravity data from Data Service
-            # 2. Run inversion algorithm (spherical harmonics, mascons, etc.)
-            # 3. Use ML models if hybrid_ml is enabled
-            # 4. Store results back to Data Service
+            # Rough estimate based on configured grid size.
+            grid_cells = int(job.config.get("grid_rows", 12)) * int(job.config.get("grid_cols", 12))
+            estimated = max(5.0, grid_cells * 0.05)
 
             return inversion_service_pb2.InversionResponse(
-                job_id=job_id,
-                status="running",
-                message=f"Inversion {request.inversion_type} started",
-                estimated_time=7200.0  # Mock: 2 hours
+                job_id=job.job_id,
+                status=job.status,
+                message=f"Inversion {job.inversion_type} started",
+                estimated_time=estimated,
             )
 
         except Exception as e:
-            logger.error(f"Error starting inversion: {e}")
+            logger.error("Error starting inversion: %s", e)
             return inversion_service_pb2.InversionResponse(
                 job_id="",
                 status="failed",
                 message=f"Error: {str(e)}",
-                estimated_time=0.0
+                estimated_time=0.0,
             )
 
     def GetInversionStatus(self, request, context):
-        """Get status of inversion job"""
+        """Get real-time status of an inversion job."""
         try:
-            job = self.inversion_jobs.get(request.job_id)
+            job = self.engine.get(request.job_id)
             if not job:
                 return inversion_service_pb2.InversionStatusResponse(
                     job_id=request.job_id,
                     status="not_found",
                     progress=0.0,
-                    message="Inversion job not found"
+                    message="Inversion job not found",
                 )
 
-            # Mock progress
             return inversion_service_pb2.InversionStatusResponse(
-                job_id=request.job_id,
-                status=job["status"],
-                progress=0.65,  # Mock: 65% complete
-                current_iteration=650,
-                total_iterations=1000,
-                residual=0.0234,
-                message="Inversion in progress"
+                job_id=job.job_id,
+                status=job.status,
+                progress=job.progress,
+                current_iteration=job.current_iteration,
+                total_iterations=job.total_iterations,
+                residual=job.residual,
+                message=job.message,
             )
 
         except Exception as e:
-            logger.error(f"Error getting inversion status: {e}")
+            logger.error("Error getting inversion status: %s", e)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return inversion_service_pb2.InversionStatusResponse()
 
     def GetInversionResult(self, request, context):
-        """Get inversion results"""
+        """Get inversion results, serializing artifacts on first completion."""
         try:
-            logger.info(f"Retrieving inversion result: {request.job_id}")
+            logger.info("Retrieving inversion result: %s", request.job_id)
+            job = self.engine.get(request.job_id)
 
-            # Mock result - in production, this would load from storage
-            result = inversion_service_pb2.InversionResult(
-                job_id=request.job_id,
-                inversion_type="spherical_harmonics",
-                status="completed",
-                completed_at=datetime_to_timestamp(datetime.utcnow()),
-                iterations=1000,
-                final_residual=0.000123,
-                convergence_achieved=True,
-                gravity_field_url="s3://galileo/inversions/inv_12345/field.nc",
-                coefficients_url="s3://galileo/inversions/inv_12345/coeffs.json",
+            if not job:
+                context.set_code(grpc.StatusCode.NOT_FOUND)
+                context.set_details(f"Job {request.job_id} not found")
+                return inversion_service_pb2.InversionResult()
+
+            if job.status != "completed":
+                return inversion_service_pb2.InversionResult(
+                    job_id=job.job_id,
+                    inversion_type=job.inversion_type,
+                    status=job.status,
+                    convergence_achieved=False,
+                    metadata={"message": job.message},
+                )
+
+            # Serialize result artifacts once and cache the URLs.
+            urls = self._result_urls.get(job.job_id)
+            if urls is None and job.model is not None:
+                urls = self.writer.write(
+                    job_id=job.job_id,
+                    model=job.model,
+                    grid_shape=job.grid_shape,
+                    metadata={
+                        "inversion_type": job.inversion_type,
+                        "lambda": job.config.get("lambda", "auto"),
+                        "residual": f"{job.residual:.6e}",
+                    },
+                    uncertainties=job.uncertainties,
+                )
+                self._result_urls[job.job_id] = urls
+                self.store.upsert(job, urls)
+            urls = urls or {}
+
+            return inversion_service_pb2.InversionResult(
+                job_id=job.job_id,
+                inversion_type=job.inversion_type,
+                status=job.status,
+                completed_at=datetime_to_timestamp(job.completed_at or datetime.utcnow()),
+                iterations=job.current_iteration,
+                final_residual=job.residual,
+                convergence_achieved=job.convergence_achieved,
+                gravity_field_url=urls.get("gravity_field_url", ""),
+                coefficients_url=urls.get("coefficients_url", ""),
                 metadata={
-                    "max_degree": "120",
-                    "algorithm": "conjugate_gradient",
-                    "regularization": "tikhonov"
-                }
+                    "grid_shape": f"{job.grid_shape[0]}x{job.grid_shape[1]}",
+                    "regularization": job.config.get("lambda", "auto"),
+                    "algorithm": job.inversion_type,
+                },
             )
 
-            return result
-
         except Exception as e:
-            logger.error(f"Error getting inversion result: {e}")
+            logger.error("Error getting inversion result: %s", e)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return inversion_service_pb2.InversionResult()
 
     def ListInversions(self, request, context):
-        """List inversion jobs"""
+        """List inversion jobs tracked by the engine.
+
+        ``ListInversionsResponse.jobs`` is ``repeated InversionJob`` (the full
+        message), so build InversionJob entries here.
+        """
         try:
-            # Mock list
-            inversions = [
-                inversion_service_pb2.InversionJobInfo(
-                    job_id="inv_001",
-                    inversion_type="spherical_harmonics",
-                    status="completed",
-                    created_at=datetime_to_timestamp(datetime.utcnow()),
-                    progress=1.0
-                ),
-                inversion_service_pb2.InversionJobInfo(
-                    job_id="inv_002",
-                    inversion_type="mascons",
-                    status="running",
-                    created_at=datetime_to_timestamp(datetime.utcnow()),
-                    progress=0.45
+            jobs = []
+            for job in sorted(self.engine.list_jobs(),
+                              key=lambda j: j.created_at, reverse=True):
+                entry = inversion_service_pb2.InversionJob(
+                    job_id=job.job_id,
+                    created_at=datetime_to_timestamp(job.created_at),
+                    status=job.status,
+                    progress=job.progress,
+                    rms_residual=job.residual,
+                    error_message=job.error or "",
                 )
-            ]
+                if job.completed_at:
+                    entry.completed_at.CopyFrom(datetime_to_timestamp(job.completed_at))
+                jobs.append(entry)
 
-            logger.info(f"Listing {len(inversions)} inversions")
-
-            return inversion_service_pb2.ListInversionsResponse(
-                inversions=inversions
-            )
+            logger.info("Listing %d inversions", len(jobs))
+            return inversion_service_pb2.ListInversionsResponse(jobs=jobs)
 
         except Exception as e:
-            logger.error(f"Error listing inversions: {e}")
+            logger.error("Error listing inversions: %s", e)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return inversion_service_pb2.ListInversionsResponse()
 
     def CancelInversion(self, request, context):
-        """Cancel running inversion"""
+        """Cancel a running inversion."""
         try:
-            job = self.inversion_jobs.get(request.job_id)
-            if job:
-                job["status"] = "cancelled"
-                logger.info(f"Cancelled inversion: {request.job_id}")
-
+            cancelled = self.engine.cancel(request.job_id)
+            if cancelled:
+                logger.info("Cancelled inversion: %s", request.job_id)
+            ts = Timestamp()
+            ts.FromDatetime(datetime.utcnow())
             return common_pb2.Response(
-                success=True,
-                message=f"Inversion {request.job_id} cancelled"
+                status_code=200 if cancelled else 409,
+                message=(
+                    f"Inversion {request.job_id} cancelled"
+                    if cancelled
+                    else f"Inversion {request.job_id} not cancellable"
+                ),
+                timestamp=ts,
             )
 
         except Exception as e:
-            logger.error(f"Error cancelling inversion: {e}")
+            logger.error("Error cancelling inversion: %s", e)
+            ts = Timestamp()
+            ts.FromDatetime(datetime.utcnow())
             return common_pb2.Response(
-                success=False,
+                status_code=500,
                 message=f"Error: {str(e)}",
-                error=common_pb2.Error(
-                    code="CANCEL_ERROR",
-                    message=str(e)
-                )
+                timestamp=ts,
             )
 
     def HealthCheck(self, request, context):
@@ -185,8 +217,8 @@ class InversionServicer(inversion_service_pb2_grpc.InversionServiceServicer):
                 status=common_pb2.HealthCheckResponse.SERVING
             )
         except Exception as e:
-            logger.error(f"Health check failed: {e}")
+            logger.error("Health check failed: %s", e)
             return common_pb2.HealthCheckResponse(
                 status=common_pb2.HealthCheckResponse.NOT_SERVING,
-                details={"error": str(e)}
+                details={"error": str(e)},
             )
