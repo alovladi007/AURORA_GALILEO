@@ -15,6 +15,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from src.inversion_engine import InversionEngine
 from src.result_writer import ResultWriter
 from src.persistence import JobStore
+from src.data_fetcher import GravityDataFetcher
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +34,31 @@ class InversionServicer(inversion_service_pb2_grpc.InversionServiceServicer):
         self.engine = InversionEngine()
         self.writer = ResultWriter()
         self.store = JobStore()
+        self.fetcher = GravityDataFetcher()
         self._result_urls = {}  # job_id -> {gravity_field_url, coefficients_url}
 
     def RunInversion(self, request, context):
         """Run a gravity inversion using real numerical solvers."""
         try:
             logger.info("Starting inversion: %s", request.inversion_type)
-            job = self.engine.start(request.inversion_type, dict(request.config))
+
+            # If a data_query is supplied, fetch real gravity data from the
+            # Data Service and invert that; otherwise use the synthetic problem.
+            observed, grid_shape = None, None
+            data_query = dict(request.data_query)
+            if data_query:
+                fetched = self.fetcher.fetch_grid(data_query)
+                if fetched is not None:
+                    observed, _counts, grid_shape = fetched
+                    logger.info("Using real gravity data (%d cells) for inversion",
+                                observed.size)
+                else:
+                    logger.info("No real data available; using synthetic problem")
+
+            job = self.engine.start(
+                request.inversion_type, dict(request.config),
+                observed_data=observed, grid_shape=grid_shape,
+            )
             self.store.upsert(job)
 
             # Rough estimate based on configured grid size.

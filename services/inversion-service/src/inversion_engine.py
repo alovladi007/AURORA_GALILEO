@@ -254,6 +254,10 @@ class InversionJob:
     grid_shape: tuple[int, int] = (0, 0)
     config: Dict = field(default_factory=dict)
     error: Optional[str] = None
+    # Real observed gravity data (gridded mGal). When set, the inversion runs
+    # on these observations instead of the synthetic forward problem.
+    observed_data: Optional[np.ndarray] = None
+    data_source: str = "synthetic"
 
 
 class InversionEngine:
@@ -270,13 +274,21 @@ class InversionEngine:
         self._lock = threading.Lock()
 
     # -- public API --------------------------------------------------------
-    def start(self, inversion_type: str, config: Dict[str, str]) -> InversionJob:
+    def start(self, inversion_type: str, config: Dict[str, str],
+              observed_data: Optional[np.ndarray] = None,
+              grid_shape: Optional[tuple[int, int]] = None) -> InversionJob:
         job_id = f"inv_{datetime.utcnow().timestamp()}"
         job = InversionJob(
             job_id=job_id,
             inversion_type=inversion_type or "tikhonov",
             config=dict(config or {}),
         )
+        if observed_data is not None:
+            job.observed_data = np.asarray(observed_data, dtype=float)
+            job.data_source = "data_service"
+            if grid_shape is not None:
+                job.config.setdefault("grid_rows", str(grid_shape[0]))
+                job.config.setdefault("grid_cols", str(grid_shape[1]))
         with self._lock:
             self.jobs[job_id] = job
 
@@ -318,13 +330,22 @@ class InversionEngine:
             job.total_iterations = max_iter
 
             rng = np.random.default_rng(int(cfg.get("seed", 7)))
-            G = build_point_mass_operator((n_rows, n_cols), n_obs, rng=rng)
             L = laplacian_regularizer((n_rows, n_cols))
 
-            # Synthetic "true" model: a localized density anomaly blob.
-            true_model = self._synthetic_anomaly((n_rows, n_cols))
-            clean = G @ true_model
-            data = clean + noise * np.linalg.norm(clean) / np.sqrt(len(clean)) * rng.standard_normal(len(clean))
+            if job.observed_data is not None:
+                # Real data path: observations live on the model grid, so use a
+                # square operator mapping density -> gridded gravity response.
+                job.message = "Inverting observed gravity data"
+                data = job.observed_data.ravel()
+                n_obs = data.size
+                G = build_point_mass_operator((n_rows, n_cols), n_obs, rng=rng)
+                true_model = None
+            else:
+                # Synthetic path: known "true" model for validation.
+                G = build_point_mass_operator((n_rows, n_cols), n_obs, rng=rng)
+                true_model = self._synthetic_anomaly((n_rows, n_cols))
+                clean = G @ true_model
+                data = clean + noise * np.linalg.norm(clean) / np.sqrt(len(clean)) * rng.standard_normal(len(clean))
 
             itype = job.inversion_type.lower()
             if itype in ("bayesian", "map"):
@@ -344,13 +365,19 @@ class InversionEngine:
             job.convergence_achieved = result.get("residual", 1.0) < float(cfg.get("convergence_threshold", 1e-2))
             job.status = "completed"
             job.completed_at = datetime.utcnow()
-            # Model recovery quality metric.
-            denom = np.linalg.norm(true_model) or 1.0
-            model_error = float(np.linalg.norm(job.model - true_model) / denom)
-            job.message = (
-                f"Inversion complete: residual={job.residual:.4e}, "
-                f"model_error={model_error:.3f}"
-            )
+            if true_model is not None:
+                # Synthetic: report model recovery quality.
+                denom = np.linalg.norm(true_model) or 1.0
+                model_error = float(np.linalg.norm(job.model - true_model) / denom)
+                job.message = (
+                    f"Inversion complete ({job.data_source}): "
+                    f"residual={job.residual:.4e}, model_error={model_error:.3f}"
+                )
+            else:
+                job.message = (
+                    f"Inversion complete ({job.data_source}): "
+                    f"residual={job.residual:.4e}, cells={data.size}"
+                )
             logger.info("Inversion job %s completed: %s", job.job_id, job.message)
         except Exception as exc:  # noqa: BLE001 - surface any failure to the job
             logger.exception("Inversion job %s failed", job.job_id)

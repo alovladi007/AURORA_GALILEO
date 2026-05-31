@@ -1,252 +1,231 @@
 """
 Control Service gRPC implementation
+
+Real orbit propagation (two-body + J2, RK4), mission planning with delta-v
+budgeting, and asynchronous mission simulation. Aligned with
+proto/control_service.proto (CreateMissionPlanRequest/Response, MissionPlan,
+ManeuverRequest -> common.Response, PropagationRequest/Response, etc.).
 """
 
 import grpc
 import logging
 import math
 from datetime import datetime, timedelta
-from typing import List
+
+import numpy as np
 
 from src.gen import control_service_pb2, control_service_pb2_grpc, common_pb2
 from google.protobuf.timestamp_pb2 import Timestamp
+
+from src.propagator import propagate, circular_state, R_EARTH
+from src.mission import MissionManager
 
 logger = logging.getLogger(__name__)
 
 
 def datetime_to_timestamp(dt: datetime) -> Timestamp:
-    """Convert datetime to protobuf Timestamp"""
     ts = Timestamp()
     ts.FromDatetime(dt)
     return ts
 
 
 def timestamp_to_datetime(ts: Timestamp) -> datetime:
-    """Convert protobuf Timestamp to datetime"""
     return ts.ToDatetime()
 
 
+def _response(status_code: int, message: str, metadata: dict = None) -> common_pb2.Response:
+    ts = Timestamp()
+    ts.FromDatetime(datetime.utcnow())
+    return common_pb2.Response(
+        status_code=status_code,
+        message=message,
+        timestamp=ts,
+        metadata={k: str(v) for k, v in (metadata or {}).items()},
+    )
+
+
 class ControlServicer(control_service_pb2_grpc.ControlServiceServicer):
-    """Control Service implementation"""
+    """Control Service implementation backed by real orbital dynamics."""
 
     def __init__(self):
-        self.missions = {}  # Track mission plans
-        self.simulations = {}  # Track simulation jobs
+        self.manager = MissionManager()
 
+    # ------------------------------------------------------------------
+    # Mission planning
+    # ------------------------------------------------------------------
     def CreateMissionPlan(self, request, context):
-        """Create mission plan"""
+        """Create a mission plan (CreateMissionPlanRequest -> Response)."""
         try:
-            logger.info(f"Creating mission plan: {request.mission_name}")
-
-            # Create plan
-            plan_id = f"plan_{datetime.utcnow().timestamp()}"
-            self.missions[plan_id] = {
-                "mission_name": request.mission_name,
-                "satellite_ids": list(request.satellite_ids),
-                "status": "created",
-                "created_at": datetime.utcnow()
-            }
-
-            # In production, this would:
-            # 1. Validate satellite availability
-            # 2. Optimize mission timeline
-            # 3. Generate maneuver sequences
-            # 4. Store plan in database
-
-            return control_service_pb2.MissionPlanResponse(
-                plan_id=plan_id,
-                status="created",
-                message=f"Mission plan '{request.mission_name}' created"
+            logger.info("Creating mission plan: %s", request.name)
+            start = (timestamp_to_datetime(request.start_time)
+                     if request.start_time.seconds else datetime.utcnow())
+            end = (timestamp_to_datetime(request.end_time)
+                   if request.end_time.seconds else start + timedelta(days=7))
+            plan = self.manager.create_plan(
+                name=request.name,
+                description=request.description,
+                satellite_ids=list(request.satellite_ids),
+                start_time=start,
+                end_time=end,
             )
-
+            return control_service_pb2.CreateMissionPlanResponse(
+                plan_id=plan.plan_id,
+                response=_response(200, f"Mission plan '{plan.name}' created", {
+                    "delta_v_budget_mps": round(plan.delta_v_budget, 3),
+                    "satellites": len(plan.satellite_ids),
+                }),
+            )
         except Exception as e:
-            logger.error(f"Error creating mission plan: {e}")
-            return control_service_pb2.MissionPlanResponse(
-                plan_id="",
-                status="failed",
-                message=f"Error: {str(e)}"
+            logger.error("Error creating mission plan: %s", e)
+            return control_service_pb2.CreateMissionPlanResponse(
+                response=_response(500, f"Error: {e}")
             )
 
     def GetMissionPlan(self, request, context):
-        """Get mission plan details"""
+        """Get a mission plan (MissionPlanQuery -> MissionPlan)."""
         try:
-            plan = self.missions.get(request.plan_id)
+            plan = self.manager.get_plan(request.plan_id)
             if not plan:
                 context.set_code(grpc.StatusCode.NOT_FOUND)
                 context.set_details(f"Plan {request.plan_id} not found")
                 return control_service_pb2.MissionPlan()
-
-            # Mock plan details
             return control_service_pb2.MissionPlan(
-                plan_id=request.plan_id,
-                mission_name=plan["mission_name"],
-                satellite_ids=plan["satellite_ids"],
-                start_time=datetime_to_timestamp(datetime.utcnow()),
-                end_time=datetime_to_timestamp(datetime.utcnow() + timedelta(days=7)),
-                status="active",
-                objectives=["gravity_mapping", "orbit_maintenance"],
-                metadata={"priority": "high", "coverage": "global"}
+                plan_id=plan.plan_id,
+                name=plan.name,
+                description=plan.description,
+                satellite_ids=plan.satellite_ids,
+                start_time=datetime_to_timestamp(plan.start_time),
+                end_time=datetime_to_timestamp(plan.end_time),
+                status=plan.status,
             )
-
         except Exception as e:
-            logger.error(f"Error getting mission plan: {e}")
+            logger.error("Error getting mission plan: %s", e)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return control_service_pb2.MissionPlan()
 
+    # ------------------------------------------------------------------
+    # Maneuvers
+    # ------------------------------------------------------------------
     def ExecuteManeuver(self, request, context):
-        """Execute satellite maneuver"""
+        """Execute a satellite maneuver (ManeuverRequest -> common.Response)."""
         try:
-            logger.info(f"Executing maneuver for satellite {request.satellite_id}")
-
-            # In production, this would:
-            # 1. Validate maneuver parameters
-            # 2. Check satellite constraints
-            # 3. Send commands to satellite
-            # 4. Monitor execution
-
-            return common_pb2.Response(
-                success=True,
-                message=f"Maneuver executed for {request.satellite_id}",
-                data={
-                    "maneuver_id": f"mnv_{datetime.utcnow().timestamp()}",
-                    "delta_v_applied": str(request.delta_v),
-                    "execution_time": datetime.utcnow().isoformat()
-                }
-            )
-
+            logger.info("Executing maneuver for satellite %s", request.satellite_id)
+            delta_v = self.manager.maneuver_cost(request.delta_v)
+            exec_time = (timestamp_to_datetime(request.execution_time)
+                         if request.execution_time.seconds else datetime.utcnow())
+            return _response(200, f"Maneuver executed for {request.satellite_id}", {
+                "maneuver_id": f"mnv_{datetime.utcnow().timestamp()}",
+                "maneuver_type": request.maneuver_type,
+                "delta_v_mps": round(delta_v, 4),
+                "execution_time": exec_time.isoformat(),
+            })
         except Exception as e:
-            logger.error(f"Error executing maneuver: {e}")
-            return common_pb2.Response(
-                success=False,
-                message=f"Error: {str(e)}",
-                error=common_pb2.Error(
-                    code="MANEUVER_ERROR",
-                    message=str(e)
-                )
-            )
+            logger.error("Error executing maneuver: %s", e)
+            return _response(500, f"Error: {e}")
 
+    # ------------------------------------------------------------------
+    # Orbit propagation
+    # ------------------------------------------------------------------
     def PropagateOrbit(self, request, context):
-        """Propagate satellite orbit"""
+        """Propagate an orbit using two-body + J2 RK4 integration."""
         try:
-            logger.info(f"Propagating orbit for satellite {request.satellite_id}")
+            logger.info("Propagating orbit for satellite %s", request.satellite_id)
+            start_time = (timestamp_to_datetime(request.start_time)
+                          if request.start_time.seconds else datetime.utcnow())
+            duration = request.duration or 5400  # default ~1 orbit
+            timestep = request.timestep or 60
 
-            # Simple circular orbit propagation (mock)
-            states = []
-            start_time = timestamp_to_datetime(request.start_time)
-            duration = request.duration
-            timestep = 60.0  # 1 minute steps
+            # Build the initial state from the request if provided, else a
+            # default near-polar circular LEO at 500 km.
+            init = request.initial_state
+            if init.position.x or init.position.y or init.position.z:
+                state0 = np.array([
+                    init.position.x, init.position.y, init.position.z,
+                    init.velocity.x, init.velocity.y, init.velocity.z,
+                ], dtype=float)
+            else:
+                state0 = circular_state(500.0, 89.0)
 
-            # Mock orbital parameters
-            altitude = 550000.0  # 550 km
-            radius = 6371000.0 + altitude  # Earth radius + altitude
-            velocity = math.sqrt(398600.4418e9 / radius)  # Orbital velocity
-            period = 2 * math.pi * radius / velocity  # Orbital period
+            times, states = propagate(state0, float(duration), float(timestep),
+                                      include_j2=True)
 
-            num_steps = min(int(duration / timestep), 1000)  # Limit to 1000 points
+            out_states = []
+            for t, s in zip(times, states):
+                out_states.append(control_service_pb2.OrbitState(
+                    timestamp=datetime_to_timestamp(start_time + timedelta(seconds=t)),
+                    position=common_pb2.Vector3(x=float(s[0]), y=float(s[1]), z=float(s[2])),
+                    velocity=common_pb2.Vector3(x=float(s[3]), y=float(s[4]), z=float(s[5])),
+                ))
 
-            for i in range(num_steps):
-                t = i * timestep
-                current_time = start_time + timedelta(seconds=t)
-
-                # Circular orbit position (simplified)
-                angle = (t / period) * 2 * math.pi
-                x = radius * math.cos(angle)
-                y = radius * math.sin(angle)
-                z = 0.0
-
-                vx = -velocity * math.sin(angle)
-                vy = velocity * math.cos(angle)
-                vz = 0.0
-
-                states.append(
-                    control_service_pb2.OrbitState(
-                        timestamp=datetime_to_timestamp(current_time),
-                        position=common_pb2.Vector3(x=x, y=y, z=z),
-                        velocity=common_pb2.Vector3(x=vx, y=vy, z=vz)
-                    )
-                )
-
-            logger.info(f"Propagated {len(states)} orbital states")
-
+            logger.info("Propagated %d orbital states", len(out_states))
             return control_service_pb2.PropagationResponse(
                 satellite_id=request.satellite_id,
-                states=states,
-                propagator_type="keplerian",
-                message=f"Propagated {len(states)} states"
+                states=out_states,
+                propagator_type="two_body_j2_rk4",
+                message=f"Propagated {len(out_states)} states over {duration}s",
             )
-
         except Exception as e:
-            logger.error(f"Error propagating orbit: {e}")
+            logger.error("Error propagating orbit: %s", e)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return control_service_pb2.PropagationResponse()
 
+    # ------------------------------------------------------------------
+    # Simulation
+    # ------------------------------------------------------------------
     def SimulateMission(self, request, context):
-        """Simulate entire mission"""
+        """Start an asynchronous mission simulation."""
         try:
-            logger.info(f"Simulating mission: {request.mission_name}")
-
-            # Create simulation job
-            job_id = f"sim_{datetime.utcnow().timestamp()}"
-            self.simulations[job_id] = {
-                "mission_name": request.mission_name,
-                "status": "running",
-                "started_at": datetime.utcnow()
-            }
-
+            logger.info("Simulating mission: %s", request.mission_name)
+            job = self.manager.start_simulation(request.mission_name, dict(request.config))
             return control_service_pb2.SimulationResponse(
-                job_id=job_id,
-                status="running",
+                job_id=job.job_id,
+                status=job.status,
                 message=f"Simulation '{request.mission_name}' started",
-                estimated_time=1800.0  # Mock: 30 minutes
+                estimated_time=float(dict(request.config).get("duration_hours", 24)) * 2.0,
             )
-
         except Exception as e:
-            logger.error(f"Error simulating mission: {e}")
+            logger.error("Error simulating mission: %s", e)
             return control_service_pb2.SimulationResponse(
-                job_id="",
-                status="failed",
-                message=f"Error: {str(e)}",
-                estimated_time=0.0
+                job_id="", status="failed", message=f"Error: {e}", estimated_time=0.0
             )
 
     def GetSimulationStatus(self, request, context):
-        """Get simulation status"""
+        """Get the status of a mission simulation."""
         try:
-            sim = self.simulations.get(request.job_id)
+            sim = self.manager.get_simulation(request.job_id)
             if not sim:
                 return control_service_pb2.SimulationStatusResponse(
                     job_id=request.job_id,
                     status="not_found",
                     progress=0.0,
-                    message="Simulation not found"
+                    message="Simulation not found",
                 )
-
-            # Mock progress
             return control_service_pb2.SimulationStatusResponse(
-                job_id=request.job_id,
-                status=sim["status"],
-                progress=0.55,
-                current_time=datetime_to_timestamp(datetime.utcnow()),
-                message="Simulation in progress"
+                job_id=sim.job_id,
+                status=sim.status,
+                progress=sim.progress,
+                current_time=datetime_to_timestamp(sim.current_time),
+                message=sim.message,
             )
-
         except Exception as e:
-            logger.error(f"Error getting simulation status: {e}")
+            logger.error("Error getting simulation status: %s", e)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return control_service_pb2.SimulationStatusResponse()
 
+    # ------------------------------------------------------------------
+    # Health
+    # ------------------------------------------------------------------
     def HealthCheck(self, request, context):
-        """Health check endpoint"""
         try:
             return common_pb2.HealthCheckResponse(
                 status=common_pb2.HealthCheckResponse.SERVING
             )
         except Exception as e:
-            logger.error(f"Health check failed: {e}")
+            logger.error("Health check failed: %s", e)
             return common_pb2.HealthCheckResponse(
                 status=common_pb2.HealthCheckResponse.NOT_SERVING,
-                details={"error": str(e)}
+                details={"error": str(e)},
             )
