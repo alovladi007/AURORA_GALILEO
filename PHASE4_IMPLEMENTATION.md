@@ -207,17 +207,56 @@ Metrics collected:
 - `circuit_breaker_state{name="data_service_query"} = 0` (CLOSED)
 - `service_health{service="data"} = 1` (healthy)
 
-## Next Steps (Phase 4 Continuation — Weeks 16-18)
+## Comprehensive Testing (Week 16) ✅ **COMPLETE**
 
-**Week 15: Complete** (Prometheus metrics + enhanced circuit breakers)
+A full integration test suite was built against the **real generated protobuf
+stubs** and isolated databases. **57 tests** across all five services, all
+passing.
 
-**Weeks 16-18: In Progress**
+### Test Infrastructure
 
-### Comprehensive Testing (Week 16)
-- Integration tests for all services (pytest + gRPC stubs)
-- WebSocket stream tests (concurrent clients, subscription filtering)
-- Workflow execution tests (mocked gRPC calls, step failures)
-- Circuit breaker behavior tests (state transitions, recovery)
+- **`scripts/generate_protos.sh`**: Generates Python gRPC stubs into each
+  service's `src/gen/` (so `from src.gen import ...` resolves). Stubs are
+  build artifacts (gitignored).
+- **`scripts/run_tests.sh`**: Runs every service's pytest suite with the
+  correct `PYTHONPATH`, overriding the repo-root `pytest.ini`. Prints a
+  per-service pass/fail summary.
+- Per-service `conftest.py`: sets up `sys.path`, provides `servicer` /
+  `context` fixtures (a `FakeContext` gRPC stub), and an isolated SQLite
+  database for the Data Service.
+
+### Coverage by Service
+
+| Service | Tests | What's covered |
+|---------|-------|----------------|
+| **data-service** | 10 | Gravity/telemetry batch ingestion, validation (out-of-range flagged, bad-location rejected), query + bounding-box filter, pagination, **server-side streaming** (live publish→stream), CSV export, health |
+| **ml-service** | 6 | Training job lifecycle (real NumPy MLP), status polling, ListModels (full `Model` message), prediction with trained model, unknown-model NOT_FOUND, health |
+| **inversion-service** | 14 | Solvers (Tikhonov L-curve recovery, Gauss-Newton, Bayesian uncertainties), async engine (job completion, cancellation, real-data path), gRPC (run→status→result, list, cancel), health |
+| **control-service** | 14 | **Propagator physics** (94.6-min LEO period vs analytic, two-body energy conservation, orbit closure, J2 trajectory divergence, altitude bounds), mission planning, maneuver Δv, orbit propagation RPC, simulation, health |
+| **api-gateway** | 13 | Circuit-breaker state machine (CLOSED→OPEN→HALF_OPEN→CLOSED, fast-fail, recovery, half-open reopen, sync callables), event orchestrator (workflow registration, event-triggered execution, conditional step skip, unknown-event handling) |
+
+### Real Bug Found & Fixed During Testing
+
+- **Streaming timestamp crash**: `StreamTelemetry`/`StreamGravity` called
+  `Timestamp.FromJsonString()` on an ISO-8601 datetime produced by
+  `datetime.isoformat()`, which raised `time data '2026-06' does not match
+  format`. Fixed to parse with `datetime.fromisoformat()` +
+  `Timestamp.FromDatetime()`. The streaming test now verifies a published
+  record reaches a live stream subscriber end-to-end.
+
+### Running the Tests
+
+```bash
+./scripts/run_tests.sh           # all services
+./scripts/run_tests.sh -v        # verbose
+cd services/data-service && PYTHONPATH=src:src/gen python3 -m pytest tests/ -o addopts=""
+```
+
+## Next Steps (Phase 4 Continuation — Weeks 17-18)
+
+**Weeks 15-16: Complete** (Metrics + circuit breakers + comprehensive testing)
+
+**Weeks 17-18: In Progress**
 
 ### Load Testing & Performance (Week 17)
 - Locust load tests (HTTP endpoints, WebSocket streams)
@@ -231,6 +270,22 @@ Metrics collected:
 - Rate limiting enhancements (per-user, per-endpoint)
 - Input validation hardening (proto validation, SQL injection prevention)
 - Secrets management (Vault integration, environment variable encryption)
+
+## Test Suite Summary
+
+```
+============================================================
+  Summary
+============================================================
+  PASS  data-service      (10 tests)
+  PASS  ml-service        ( 6 tests)
+  PASS  inversion-service (14 tests)
+  PASS  control-service   (14 tests)
+  PASS  api-gateway       (13 tests)
+------------------------------------------------------------
+  TOTAL: 57 tests passing
+============================================================
+```
 
 ## Files Created/Modified
 

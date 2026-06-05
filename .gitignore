@@ -4,6 +4,14 @@ __pycache__/
 *$py.class
 *.so
 .Python
+
+# Generated protobuf stubs (created by scripts/generate_protos.sh)
+services/*/src/gen/
+services/api-gateway/src/gen/
+
+# Test artifacts
+.pytest_cache/
+*.db
 build/
 develop-eggs/
 dist/

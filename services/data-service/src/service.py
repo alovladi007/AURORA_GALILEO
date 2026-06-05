@@ -507,9 +507,13 @@ class DataServicer(data_service_pb2_grpc.DataServiceServicer):
                     temperature=record.get("temperature", 0.0),
                     battery_level=record.get("battery_level", 0.0),
                 )
-                # Set timestamp from record
-                if "timestamp" in record:
-                    telemetry.timestamp.FromJsonString(record["timestamp"])
+                # Set timestamp from record (stored as ISO-8601).
+                if record.get("timestamp"):
+                    try:
+                        telemetry.timestamp.FromDatetime(
+                            datetime.fromisoformat(record["timestamp"]))
+                    except (ValueError, TypeError):
+                        pass
 
                 yield telemetry
 
@@ -564,8 +568,12 @@ class DataServicer(data_service_pb2_grpc.DataServiceServicer):
                         altitude=record.get("altitude", 0.0),
                     ),
                 )
-                if "timestamp" in record:
-                    measurement.timestamp.FromJsonString(record["timestamp"])
+                if record.get("timestamp"):
+                    try:
+                        measurement.timestamp.FromDatetime(
+                            datetime.fromisoformat(record["timestamp"]))
+                    except (ValueError, TypeError):
+                        pass
 
                 yield measurement
 
