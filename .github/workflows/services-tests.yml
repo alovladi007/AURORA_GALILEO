@@ -1,0 +1,74 @@
+name: Microservices Tests
+
+on:
+  push:
+    branches: [ main, develop, 'claude/**' ]
+    paths:
+      - 'services/**'
+      - 'proto/**'
+      - 'scripts/generate_protos.sh'
+      - 'scripts/run_tests.sh'
+      - '.github/workflows/services-tests.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'services/**'
+      - 'proto/**'
+
+jobs:
+  services-tests:
+    name: Service ${{ matrix.service }} tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - data-service
+          - ml-service
+          - inversion-service
+          - control-service
+          - api-gateway
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install common test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio grpcio grpcio-tools protobuf \
+                      numpy sqlalchemy
+
+      - name: Install service dependencies
+        run: |
+          if [ -f "services/${{ matrix.service }}/requirements.txt" ]; then
+            pip install -r "services/${{ matrix.service }}/requirements.txt" || true
+          fi
+
+      - name: Generate protobuf stubs
+        run: |
+          chmod +x scripts/generate_protos.sh
+          ./scripts/generate_protos.sh
+
+      - name: Run ${{ matrix.service }} tests
+        working-directory: services/${{ matrix.service }}
+        run: |
+          PYTHONPATH="src:src/gen" python3 -m pytest tests/ \
+            -o addopts="" -p no:cacheprovider -v
+
+  all-services-summary:
+    name: All services test summary
+    runs-on: ubuntu-latest
+    needs: services-tests
+    if: always()
+    steps:
+      - name: Report
+        run: |
+          echo "Microservices test matrix completed."
+          echo "See individual service jobs for per-service results."

@@ -271,6 +271,48 @@ cd services/data-service && PYTHONPATH=src:src/gen python3 -m pytest tests/ -o a
 - Input validation hardening (proto validation, SQL injection prevention)
 - Secrets management (Vault integration, environment variable encryption)
 
+## Load Testing & Security (Weeks 17-18) ✅ **COMPLETE**
+
+### CI Pipeline
+
+- **`.github/workflows/services-tests.yml`**: matrix job running each service's
+  pytest suite on every push/PR touching `services/**` or `proto/**`. Generates
+  protobuf stubs, installs per-service deps, runs tests with the correct
+  `PYTHONPATH`.
+
+### Load Testing
+
+- **`services/api-gateway/tests/locustfile.py`**: Locust harness simulating
+  dashboard clients. Weighted tasks across `/health`, `/metrics`,
+  `/api/v1/data/telemetry` (read + ingest), and workflow endpoints. Suggested
+  SLOs: p95 < 500 ms for reads, error rate < 1%.
+  ```bash
+  locust -f locustfile.py --host http://localhost:8000 \
+      --users 100 --spawn-rate 10 --run-time 2m --headless
+  ```
+
+### Security Hardening
+
+- **`services/api-gateway/src/api/grpc_security.py`** (~190 lines):
+  - **`TokenAuthClientInterceptor`**: appends `x-service-token` metadata to
+    outbound gRPC calls (unary + stream).
+  - **`TokenAuthServerInterceptor`**: rejects inbound calls without the
+    expected token (`UNAUTHENTICATED`); health checks exempt.
+  - **`make_client_channel(address)`**: mTLS channel from `GALILEO_TLS_*` PEM
+    files (insecure fallback for dev), with token interceptor layered when
+    `GALILEO_SERVICE_TOKEN` is set.
+  - **`make_server_credentials()`**: mTLS server creds; `require_client_auth`
+    when a CA is configured.
+  - **`server_auth_interceptors()`**: token-auth interceptor list (empty in dev).
+
+- **`scripts/generate_dev_certs.sh`**: generates a local CA + server/client
+  certs (with SANs) for development mTLS. Chain verifies with `openssl verify`.
+  Certs are gitignored; production uses managed PKI.
+
+- **`docs/SECURITY.md`**: full security guide — threat model, JWT client auth,
+  inter-service token + mTLS, RBAC, rate limiting, circuit breakers, and a
+  production checklist.
+
 ## Test Suite Summary
 
 ```
@@ -281,9 +323,9 @@ cd services/data-service && PYTHONPATH=src:src/gen python3 -m pytest tests/ -o a
   PASS  ml-service        ( 6 tests)
   PASS  inversion-service (14 tests)
   PASS  control-service   (14 tests)
-  PASS  api-gateway       (13 tests)
+  PASS  api-gateway       (21 tests)  [+8 gRPC security]
 ------------------------------------------------------------
-  TOTAL: 57 tests passing
+  TOTAL: 65 tests passing
 ============================================================
 ```
 
@@ -309,4 +351,8 @@ cd services/data-service && PYTHONPATH=src:src/gen python3 -m pytest tests/ -o a
 
 ---
 
-**Phase 4 Status**: **Week 15 Complete** (Metrics + Circuit Breakers). Weeks 16-18 in progress (Testing, Performance, Security).
+**Phase 4 Status**: **COMPLETE** (Weeks 15-18)
+- ✅ Week 15: Prometheus metrics + enhanced circuit breakers
+- ✅ Week 16: Comprehensive integration tests (57 → 65 tests)
+- ✅ Week 17: CI pipeline (services-tests workflow) + Locust load harness
+- ✅ Week 18: gRPC security (token auth interceptors + mTLS) + security docs
