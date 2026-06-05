@@ -43,6 +43,7 @@ from api.websocket_routes import router as websocket_router
 from api.websocket_bridge import get_bridge
 from api.workflow_routes import router as workflow_router
 from api.event_orchestrator import get_orchestrator
+from api.metrics import MetricsMiddleware, update_service_health, grpc_call_metrics
 
 # Configure logging
 logging.basicConfig(
@@ -143,6 +144,9 @@ app.add_middleware(
 )
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# Add Prometheus metrics middleware
+app.add_middleware(MetricsMiddleware)
+
 # Instrument with OpenTelemetry
 instrument_fastapi(app)
 
@@ -201,8 +205,8 @@ async def health_check():
 @app.get("/metrics")
 async def metrics():
     """Prometheus metrics endpoint"""
-    # TODO: Implement Prometheus metrics export
-    return {"message": "Metrics endpoint"}
+    from api.metrics import get_metrics
+    return get_metrics()
 
 #
 # Data Service Endpoints

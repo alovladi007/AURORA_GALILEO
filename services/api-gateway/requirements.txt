@@ -23,6 +23,10 @@ opentelemetry-sdk==1.21.0
 opentelemetry-instrumentation-fastapi==0.42b0
 opentelemetry-instrumentation-grpc==0.42b0
 opentelemetry-exporter-otlp-proto-grpc==1.21.0
+opentelemetry-exporter-jaeger==1.21.0
+
+# Prometheus metrics
+prometheus-client==0.19.0
 
 # WebSocket support
 websockets==12.0
