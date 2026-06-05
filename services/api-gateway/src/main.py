@@ -41,6 +41,8 @@ from api.telemetry import (
 )
 from api.websocket_routes import router as websocket_router
 from api.websocket_bridge import get_bridge
+from api.workflow_routes import router as workflow_router
+from api.event_orchestrator import get_orchestrator
 
 # Configure logging
 logging.basicConfig(
@@ -104,10 +106,17 @@ async def lifespan(app: FastAPI):
     await bridge.start()
     logger.info("WebSocket bridge started")
 
+    # Start event orchestrator for workflow execution
+    orchestrator = get_orchestrator()
+    orchestrator.register_grpc_stubs(grpc_manager.stubs)
+    await orchestrator.start()
+    logger.info("Event orchestrator started")
+
     yield
 
     # Shutdown
     logger.info("Shutting down API Gateway...")
+    await orchestrator.stop()
     await bridge.stop()
     await grpc_manager.close()
 
@@ -139,6 +148,9 @@ instrument_fastapi(app)
 
 # Include WebSocket routes
 app.include_router(websocket_router)
+
+# Include Workflow routes
+app.include_router(workflow_router)
 
 # Dependency: Extract user context from JWT token
 async def get_user_context(authorization: str = Header(None)) -> common_pb2.UserContext:

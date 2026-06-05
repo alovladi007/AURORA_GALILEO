@@ -147,9 +147,55 @@ ws.send(JSON.stringify({
 {"type": "data", "topic": "galileo.gravity", "timestamp": "2024-01-15T12:00:01Z", "data": {...}}
 ```
 
+## Event-Driven Workflows (Week 14)
+
+### API Gateway (`services/api-gateway/src/api/`)
+
+- **`event_orchestrator.py`** (~370 lines)
+  - `EventOrchestrator`: Subscribes to Kafka event topics, executes cross-service workflows
+  - `Workflow`: Declarative workflow definitions with steps, conditions, retry logic
+  - `WorkflowExecution`: Tracks running workflows (status, completed/failed steps, errors)
+  - Built-in workflows:
+    1. **auto_ml_retrain**: `data_ingested` → check volume → trigger ML training
+    2. **update_mission_after_inversion**: `inversion_completed` → get result → create mission plan
+    3. **refresh_inversion_after_maneuver**: `maneuver_executed` → query telemetry → start inversion
+  - Execution: async with retries (exponential backoff), per-step gRPC calls
+  - Topics: `galileo.events.data`, `galileo.events.ml`, `galileo.events.inversion`, `galileo.events.control`
+
+- **`workflow_routes.py`** (~150 lines)
+  - `/api/v1/workflows/executions`: list all workflow executions (filtered by status)
+  - `/api/v1/workflows/executions/{id}`: get execution details
+  - `/api/v1/workflows/trigger`: manually trigger workflow by publishing event
+  - `/api/v1/workflows/workflows`: list all registered workflows
+  - `/api/v1/workflows/statistics`: execution stats (total, completed, failed, success rate)
+
+### API Gateway Updates
+
+- **`main.py`**:
+  - Lifespan: `orchestrator = get_orchestrator(); orchestrator.register_grpc_stubs(grpc_manager.stubs); await orchestrator.start()`
+  - Added workflow router
+
+## gRPC Server-Side Streaming (Week 14)
+
+### Data Service (`services/data-service/src/service.py`)
+
+- **`StreamTelemetry(QueryTelemetryRequest) returns (stream SatelliteTelemetry)`**
+  - Real-time telemetry stream from in-process broker (Kafka fallback)
+  - Filters by `satellite_ids` from request
+  - Yields records as they arrive, respects context cancellation
+  - Client disconnect → stops stream gracefully
+
+- **`StreamGravity(QueryGravityRequest) returns (stream GravityMeasurement)`**
+  - Real-time gravity measurement stream
+  - Filters by `satellite_ids` AND bounding box (`min/max_latitude/longitude`)
+  - Yields filtered records, handles context cancellation
+
+Both use `broker.stream(topic, stop_event)` which yields live records from in-process queues (Kafka topic if available).
+
 ## Next Steps (Phase 3 Continuation — Weeks 13-14)
 
-The WebSocket bridge and frontend hooks are **complete**. Remaining Phase 3 tasks:
+**Weeks 11-12: Complete** (WebSocket bridge + frontend hooks + event workflows + gRPC streaming)  
+**Weeks 13-14: In Progress**
 
 ### Frontend Dashboard Integration (Week 13)
 - **Replace mock data in components**:
@@ -184,19 +230,26 @@ The WebSocket bridge and frontend hooks are **complete**. Remaining Phase 3 task
 **New Files:**
 - `services/api-gateway/src/api/websocket_bridge.py`
 - `services/api-gateway/src/api/websocket_routes.py`
+- `services/api-gateway/src/api/event_orchestrator.py`
+- `services/api-gateway/src/api/workflow_routes.py`
 - `services/api-gateway/tests/test_websocket_client.py`
 - `ui/src/hooks/useRealTimeStream.ts`
+- `ui/src/components/LiveSatelliteTracker.tsx`
 
 **Modified Files:**
-- `services/api-gateway/src/main.py` (WebSocket router, bridge startup/shutdown)
+- `services/api-gateway/src/main.py` (WebSocket router, workflow router, bridge + orchestrator startup/shutdown)
 - `services/api-gateway/requirements.txt` (websockets, kafka-python)
+- `services/data-service/src/service.py` (StreamTelemetry, StreamGravity RPCs)
 
 ## Impact
 
 - **Real-Time Capability**: Platform now supports live telemetry/gravity streaming from ingest to frontend
 - **Scalability**: Kafka decouples producers (Data Service) from consumers (API Gateway, analytics)
-- **Developer Experience**: Frontend developers can use clean hooks without managing WebSocket protocol
+- **Event-Driven Architecture**: Cross-service workflows triggered by events (data ingestion, job completion, maneuvers)
+- **gRPC Streaming**: Low-latency server-side streaming for real-time data feeds
+- **Developer Experience**: Frontend developers can use clean hooks without managing WebSocket protocol; backend developers define workflows declaratively
 - **Graceful Degradation**: Full stack runs without Kafka (in-process fallback), suitable for local dev and testing
+- **Observability**: Workflow execution tracking, statistics, manual triggering via REST API
 
 ## Follow-Ups (Phase 4+)
 
@@ -205,4 +258,15 @@ The WebSocket bridge and frontend hooks are **complete**. Remaining Phase 3 task
 
 ---
 
-**Phase 3 Status**: **Weeks 11-12 Complete** (WebSocket bridge + frontend hooks). Weeks 13-14 in progress (dashboard integration + event workflows).
+**Phase 3 Status**: **Weeks 11-14 Core Features Complete**
+- ✅ WebSocket bridge (Kafka→WebSocket, subscription filtering, backpressure)
+- ✅ Frontend real-time hooks (useRealTimeStream, useTelemetryStream, useGravityStream)
+- ✅ LiveSatelliteTracker component (3D visualization with real-time streams)
+- ✅ Event-driven workflows (auto ML retraining, mission re-planning, inversion refresh)
+- ✅ Workflow orchestration API (execution tracking, statistics, manual triggers)
+- ✅ gRPC server-side streaming (StreamTelemetry, StreamGravity)
+
+**Remaining Week 13-14 Tasks**:
+- Dashboard integration (wire existing components to real-time streams)
+- 3D visualization polish (gravity heatmap rendering, orbit trail smoothing)
+- Workflow integration tests

@@ -477,6 +477,107 @@ class DataServicer(data_service_pb2_grpc.DataServiceServicer):
             )
 
     # ------------------------------------------------------------------
+    # Streaming (server-side)
+    # ------------------------------------------------------------------
+    def StreamTelemetry(self, request, context):
+        """Stream telemetry records in real-time (gRPC server-side streaming)."""
+        stop_event = threading.Event()
+
+        try:
+            logger.info("Client connected to telemetry stream")
+
+            # Register context cancellation
+            context.add_callback(lambda: stop_event.set())
+
+            # Stream from the broker
+            for record in broker.stream(TOPIC_TELEMETRY, stop_event):
+                # Filter by request parameters
+                sat_id = record.get("satellite_id")
+                if request.satellite_ids and sat_id not in request.satellite_ids:
+                    continue
+
+                # Convert to protobuf message
+                telemetry = data_service_pb2.SatelliteTelemetry(
+                    satellite_id=sat_id,
+                    location=common_pb2.GeoLocation(
+                        latitude=record.get("latitude", 0.0),
+                        longitude=record.get("longitude", 0.0),
+                        altitude=record.get("altitude", 0.0),
+                    ),
+                    temperature=record.get("temperature", 0.0),
+                    battery_level=record.get("battery_level", 0.0),
+                )
+                # Set timestamp from record
+                if "timestamp" in record:
+                    telemetry.timestamp.FromJsonString(record["timestamp"])
+
+                yield telemetry
+
+        except Exception as e:
+            logger.error("Error streaming telemetry: %s", e)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+        finally:
+            stop_event.set()
+            logger.info("Telemetry stream closed")
+
+    def StreamGravity(self, request, context):
+        """Stream gravity measurements in real-time (gRPC server-side streaming)."""
+        stop_event = threading.Event()
+
+        try:
+            logger.info("Client connected to gravity stream")
+
+            # Register context cancellation
+            context.add_callback(lambda: stop_event.set())
+
+            # Stream from the broker
+            for record in broker.stream(TOPIC_GRAVITY, stop_event):
+                # Filter by request parameters
+                sat_id = record.get("satellite_id")
+                if request.satellite_ids and sat_id not in request.satellite_ids:
+                    continue
+
+                # Filter by bounding box
+                lat = record.get("latitude")
+                lon = record.get("longitude")
+                if lat is not None and lon is not None:
+                    if request.min_latitude and lat < request.min_latitude:
+                        continue
+                    if request.max_latitude and lat > request.max_latitude:
+                        continue
+                    if request.min_longitude and lon < request.min_longitude:
+                        continue
+                    if request.max_longitude and lon > request.max_longitude:
+                        continue
+
+                # Convert to protobuf message
+                measurement = data_service_pb2.GravityMeasurement(
+                    measurement_id=record.get("measurement_id", ""),
+                    satellite_id=sat_id,
+                    gravity_value=record.get("gravity_value", 0.0),
+                    uncertainty=record.get("uncertainty", 0.0),
+                    quality_flag=record.get("quality_flag", "unknown"),
+                    location=common_pb2.GeoLocation(
+                        latitude=lat or 0.0,
+                        longitude=lon or 0.0,
+                        altitude=record.get("altitude", 0.0),
+                    ),
+                )
+                if "timestamp" in record:
+                    measurement.timestamp.FromJsonString(record["timestamp"])
+
+                yield measurement
+
+        except Exception as e:
+            logger.error("Error streaming gravity: %s", e)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+        finally:
+            stop_event.set()
+            logger.info("Gravity stream closed")
+
+    # ------------------------------------------------------------------
     # Health
     # ------------------------------------------------------------------
     def HealthCheck(self, request, context):
