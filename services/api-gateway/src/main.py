@@ -39,6 +39,8 @@ from api.telemetry import (
     add_span_attributes,
     get_current_trace_id,
 )
+from api.websocket_routes import router as websocket_router
+from api.websocket_bridge import get_bridge
 
 # Configure logging
 logging.basicConfig(
@@ -96,9 +98,17 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting API Gateway...")
     await grpc_manager.initialize()
+
+    # Start WebSocket bridge for real-time streaming
+    bridge = get_bridge()
+    await bridge.start()
+    logger.info("WebSocket bridge started")
+
     yield
+
     # Shutdown
     logger.info("Shutting down API Gateway...")
+    await bridge.stop()
     await grpc_manager.close()
 
 # Create FastAPI app
@@ -126,6 +136,9 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Instrument with OpenTelemetry
 instrument_fastapi(app)
+
+# Include WebSocket routes
+app.include_router(websocket_router)
 
 # Dependency: Extract user context from JWT token
 async def get_user_context(authorization: str = Header(None)) -> common_pb2.UserContext:

@@ -24,6 +24,12 @@ opentelemetry-instrumentation-fastapi==0.42b0
 opentelemetry-instrumentation-grpc==0.42b0
 opentelemetry-exporter-otlp-proto-grpc==1.21.0
 
+# WebSocket support
+websockets==12.0
+
+# Kafka client (optional)
+kafka-python==2.0.2
+
 # Utilities
 pydantic==2.4.2
 python-dotenv==1.0.0
