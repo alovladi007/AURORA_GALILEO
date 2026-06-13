@@ -315,6 +315,99 @@ message DeleteFormationResponse {
   galileo.common.Response response = 2;
 }
 
+// Navigation and state estimation (EKF)
+message CreateNavigationFilterRequest {
+  string satellite_id = 1;
+  string dynamics_type = 2;  // "two_body", "two_body_j2", "relative_hcw"
+  string measurement_type = 3;  // "gps", "laser", "imu"
+  repeated double initial_state = 4;  // [rx, ry, rz, vx, vy, vz] (km, km/s)
+  repeated double initial_covariance = 5;  // 6x6 flattened
+  map<string, double> config_float = 6;  // Q_diag, R_diag, dt, etc.
+  galileo.common.UserContext user_context = 7;
+}
+
+message CreateNavigationFilterResponse {
+  string satellite_id = 1;
+  string dynamics_type = 2;
+  string measurement_type = 3;
+  double dt = 4;
+  galileo.common.Response response = 5;
+}
+
+message NavigationMeasurement {
+  string satellite_id = 1;
+  repeated double measurement = 2;  // GPS position [x, y, z] km, or other sensor data
+  repeated double control = 3;  // Optional control input [Fx, Fy, Fz] N
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+message StateEstimate {
+  string satellite_id = 1;
+  repeated double state = 2;  // [rx, ry, rz, vx, vy, vz] (km, km/s)
+  repeated double covariance = 3;  // 6x6 flattened
+  repeated double measurement_residual = 4;  // Optional innovation
+  google.protobuf.Timestamp timestamp = 5;
+}
+
+message ProcessMeasurementRequest {
+  NavigationMeasurement measurement = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message ProcessMeasurementResponse {
+  StateEstimate estimate = 1;
+  galileo.common.Response response = 2;
+}
+
+message GetStateEstimateRequest {
+  string satellite_id = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message GetStateEstimateResponse {
+  StateEstimate estimate = 1;
+  galileo.common.Response response = 2;
+}
+
+message PredictAheadRequest {
+  string satellite_id = 1;
+  int32 steps = 2;  // Number of time steps
+  repeated NavigationMeasurement control_sequence = 3;  // Optional controls
+  galileo.common.UserContext user_context = 4;
+}
+
+message PredictAheadResponse {
+  repeated StateEstimate predictions = 1;
+  galileo.common.Response response = 2;
+}
+
+message NavigationFilterInfo {
+  string satellite_id = 1;
+  string dynamics_type = 2;
+  string measurement_type = 3;
+  google.protobuf.Timestamp created_at = 4;
+  map<string, double> config_float = 5;
+}
+
+message ListNavigationFiltersRequest {
+  galileo.common.UserContext user_context = 1;
+}
+
+message ListNavigationFiltersResponse {
+  repeated NavigationFilterInfo filters = 1;
+  galileo.common.Response response = 2;
+}
+
+message DeleteNavigationFilterRequest {
+  string satellite_id = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message DeleteNavigationFilterResponse {
+  bool success = 1;
+  galileo.common.Response response = 2;
+}
+
 // Control Service
 service ControlService {
   // Satellite operations
@@ -346,6 +439,14 @@ service ControlService {
   rpc GetFormationInfo(GetFormationInfoRequest) returns (FormationInfo);
   rpc ListFormations(ListFormationsRequest) returns (ListFormationsResponse);
   rpc DeleteFormation(DeleteFormationRequest) returns (DeleteFormationResponse);
+
+  // Navigation and state estimation (EKF)
+  rpc CreateNavigationFilter(CreateNavigationFilterRequest) returns (CreateNavigationFilterResponse);
+  rpc ProcessMeasurement(ProcessMeasurementRequest) returns (ProcessMeasurementResponse);
+  rpc GetStateEstimate(GetStateEstimateRequest) returns (GetStateEstimateResponse);
+  rpc PredictAhead(PredictAheadRequest) returns (PredictAheadResponse);
+  rpc ListNavigationFilters(ListNavigationFiltersRequest) returns (ListNavigationFiltersResponse);
+  rpc DeleteNavigationFilter(DeleteNavigationFilterRequest) returns (DeleteNavigationFilterResponse);
 
   // Mock simplified methods (non-duplicate)
   rpc GetMissionPlan(MissionPlanQuery) returns (MissionPlan);

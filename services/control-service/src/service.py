@@ -27,6 +27,13 @@ except ImportError:
     _HAS_FORMATION = False
     logger.warning("Formation controller not available (JAX not installed or repo structure issue)")
 
+try:
+    from src.navigation_ekf import NavigationEKFManager, StateEstimate as NavStateEstimate
+    _HAS_NAVIGATION = True
+except ImportError:
+    _HAS_NAVIGATION = False
+    logger.warning("Navigation EKF not available (JAX not installed or repo structure issue)")
+
 logger = logging.getLogger(__name__)
 
 
@@ -60,6 +67,11 @@ class ControlServicer(control_service_pb2_grpc.ControlServiceServicer):
             self.formation_manager = FormationControlManager()
         else:
             self.formation_manager = None
+
+        if _HAS_NAVIGATION:
+            self.navigation_manager = NavigationEKFManager()
+        else:
+            self.navigation_manager = None
 
     # ------------------------------------------------------------------
     # Mission planning
@@ -431,6 +443,237 @@ class ControlServicer(control_service_pb2_grpc.ControlServiceServicer):
         except Exception as e:
             logger.error(f"Error deleting formation: {e}")
             return control_service_pb2.DeleteFormationResponse(success=False)
+
+    # ------------------------------------------------------------------
+    # Navigation and State Estimation (EKF)
+    # ------------------------------------------------------------------
+    def CreateNavigationFilter(self, request, context):
+        """Create an EKF for satellite navigation."""
+        try:
+            if not self.navigation_manager:
+                context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+                context.set_details("Navigation EKF not available (JAX not installed)")
+                return control_service_pb2.CreateNavigationFilterResponse(
+                    response=_response(503, "Navigation EKF not available")
+                )
+
+            logger.info(
+                f"Creating {request.dynamics_type} EKF for {request.satellite_id}"
+            )
+
+            # Convert config
+            config = {k: float(v) for k, v in request.config_float.items()}
+
+            # Convert initial state/covariance if provided
+            initial_state = np.array(request.initial_state) if request.initial_state else None
+            initial_cov = None
+            if request.initial_covariance:
+                cov_flat = np.array(request.initial_covariance)
+                initial_cov = cov_flat.reshape(6, 6)
+
+            result = self.navigation_manager.create_filter(
+                satellite_id=request.satellite_id,
+                dynamics_type=request.dynamics_type,
+                measurement_type=request.measurement_type,
+                initial_state=initial_state,
+                initial_covariance=initial_cov,
+                config=config
+            )
+
+            return control_service_pb2.CreateNavigationFilterResponse(
+                satellite_id=result["satellite_id"],
+                dynamics_type=result["dynamics_type"],
+                measurement_type=result["measurement_type"],
+                dt=result["dt"],
+                response=_response(
+                    200,
+                    f"Navigation filter created: {request.dynamics_type}",
+                    {"measurement_type": request.measurement_type}
+                )
+            )
+
+        except Exception as e:
+            logger.error(f"Error creating navigation filter: {e}")
+            return control_service_pb2.CreateNavigationFilterResponse(
+                response=_response(500, f"Error: {e}")
+            )
+
+    def ProcessMeasurement(self, request, context):
+        """Process a navigation measurement and update state estimate."""
+        try:
+            if not self.navigation_manager:
+                context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+                return control_service_pb2.ProcessMeasurementResponse()
+
+            meas = request.measurement
+            measurement = np.array(meas.measurement)
+            control = np.array(meas.control) if meas.control else None
+            timestamp = meas.timestamp.ToDatetime() if meas.timestamp.seconds else None
+
+            estimate = self.navigation_manager.process_measurement(
+                satellite_id=meas.satellite_id,
+                measurement=measurement,
+                timestamp=timestamp,
+                control=control
+            )
+
+            # Convert to proto
+            proto_estimate = control_service_pb2.StateEstimate(
+                satellite_id=estimate.satellite_id,
+                state=estimate.state.tolist(),
+                covariance=estimate.covariance.flatten().tolist(),
+                timestamp=datetime_to_timestamp(estimate.timestamp)
+            )
+
+            if estimate.measurement_residual is not None:
+                proto_estimate.measurement_residual.extend(
+                    estimate.measurement_residual.tolist()
+                )
+
+            # Compute position uncertainty (km)
+            pos_uncertainty = np.sqrt(np.trace(estimate.covariance[:3, :3]))
+
+            return control_service_pb2.ProcessMeasurementResponse(
+                estimate=proto_estimate,
+                response=_response(
+                    200,
+                    "Measurement processed",
+                    {"position_uncertainty_km": f"{pos_uncertainty:.6f}"}
+                )
+            )
+
+        except Exception as e:
+            logger.error(f"Error processing measurement: {e}")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return control_service_pb2.ProcessMeasurementResponse()
+
+    def GetStateEstimate(self, request, context):
+        """Get current state estimate."""
+        try:
+            if not self.navigation_manager:
+                context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+                return control_service_pb2.GetStateEstimateResponse()
+
+            estimate = self.navigation_manager.get_state_estimate(request.satellite_id)
+            if not estimate:
+                context.set_code(grpc.StatusCode.NOT_FOUND)
+                context.set_details(f"No filter found for {request.satellite_id}")
+                return control_service_pb2.GetStateEstimateResponse()
+
+            proto_estimate = control_service_pb2.StateEstimate(
+                satellite_id=estimate.satellite_id,
+                state=estimate.state.tolist(),
+                covariance=estimate.covariance.flatten().tolist(),
+                timestamp=datetime_to_timestamp(estimate.timestamp)
+            )
+
+            return control_service_pb2.GetStateEstimateResponse(
+                estimate=proto_estimate,
+                response=_response(200, "State estimate retrieved")
+            )
+
+        except Exception as e:
+            logger.error(f"Error getting state estimate: {e}")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return control_service_pb2.GetStateEstimateResponse()
+
+    def PredictAhead(self, request, context):
+        """Predict state evolution over multiple time steps."""
+        try:
+            if not self.navigation_manager:
+                context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+                return control_service_pb2.PredictAheadResponse()
+
+            # Extract control sequence if provided
+            control_sequence = None
+            if request.control_sequence:
+                control_sequence = [
+                    np.array(ctrl.control) for ctrl in request.control_sequence
+                ]
+
+            predictions = self.navigation_manager.predict_ahead(
+                satellite_id=request.satellite_id,
+                steps=request.steps,
+                control_sequence=control_sequence
+            )
+
+            # Convert to proto
+            proto_predictions = []
+            for pred in predictions:
+                proto_predictions.append(
+                    control_service_pb2.StateEstimate(
+                        satellite_id=pred.satellite_id,
+                        state=pred.state.tolist(),
+                        covariance=pred.covariance.flatten().tolist(),
+                        timestamp=datetime_to_timestamp(pred.timestamp)
+                    )
+                )
+
+            return control_service_pb2.PredictAheadResponse(
+                predictions=proto_predictions,
+                response=_response(
+                    200,
+                    f"Predicted {len(predictions)} time steps",
+                    {"steps": request.steps}
+                )
+            )
+
+        except Exception as e:
+            logger.error(f"Error predicting ahead: {e}")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return control_service_pb2.PredictAheadResponse()
+
+    def ListNavigationFilters(self, request, context):
+        """List all navigation filters."""
+        try:
+            if not self.navigation_manager:
+                return control_service_pb2.ListNavigationFiltersResponse()
+
+            filters = self.navigation_manager.list_filters()
+
+            proto_filters = []
+            for f in filters:
+                proto_filters.append(
+                    control_service_pb2.NavigationFilterInfo(
+                        satellite_id=f["satellite_id"],
+                        dynamics_type=f["dynamics_type"],
+                        measurement_type=f["measurement_type"],
+                        created_at=datetime_to_timestamp(f["created_at"])
+                    )
+                )
+
+            return control_service_pb2.ListNavigationFiltersResponse(
+                filters=proto_filters,
+                response=_response(200, f"Found {len(filters)} filters")
+            )
+
+        except Exception as e:
+            logger.error(f"Error listing navigation filters: {e}")
+            return control_service_pb2.ListNavigationFiltersResponse()
+
+    def DeleteNavigationFilter(self, request, context):
+        """Delete a navigation filter."""
+        try:
+            if not self.navigation_manager:
+                context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+                return control_service_pb2.DeleteNavigationFilterResponse(success=False)
+
+            success = self.navigation_manager.delete_filter(request.satellite_id)
+
+            return control_service_pb2.DeleteNavigationFilterResponse(
+                success=success,
+                response=_response(
+                    200 if success else 404,
+                    f"Filter {'deleted' if success else 'not found'}"
+                )
+            )
+
+        except Exception as e:
+            logger.error(f"Error deleting navigation filter: {e}")
+            return control_service_pb2.DeleteNavigationFilterResponse(success=False)
 
     # ------------------------------------------------------------------
     # Health
