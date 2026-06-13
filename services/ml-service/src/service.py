@@ -16,6 +16,13 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from src.training_orchestrator import TrainingOrchestrator
 
+try:
+    from src.hyperparameter_tuner import HyperparameterTuner
+    _HAS_TUNER = True
+except ImportError:
+    _HAS_TUNER = False
+    logger.warning("Hyperparameter tuner not available (optuna not installed)")
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,6 +44,12 @@ class MLServicer(ml_service_pb2_grpc.MLServiceServicer):
 
     def __init__(self):
         self.orchestrator = TrainingOrchestrator()
+        if _HAS_TUNER:
+            import os
+            mlflow_uri = os.getenv("MLFLOW_TRACKING_URI")
+            self.tuner = HyperparameterTuner(mlflow_tracking_uri=mlflow_uri)
+        else:
+            self.tuner = None
 
     def TrainModel(self, request, context):
         """Start a real training job."""
@@ -183,6 +196,117 @@ class MLServicer(ml_service_pb2_grpc.MLServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return ml_service_pb2.PredictionResponse()
+
+    def TuneHyperparameters(self, request, context):
+        """Start hyperparameter tuning job."""
+        try:
+            if not self.tuner:
+                context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+                context.set_details("Hyperparameter tuning not available (optuna not installed)")
+                return ml_service_pb2.TuneHyperparametersResponse(
+                    status="unavailable",
+                    response=common_pb2.Response(
+                        success=False,
+                        message="Optuna not installed"
+                    )
+                )
+
+            logger.info("Starting hyperparameter tuning for %s", request.model_type)
+
+            job_id = self.tuner.start_tuning(
+                model_type=request.model_type,
+                n_trials=request.n_trials or 50,
+                timeout=request.timeout_seconds or 3600,
+                fixed_params=dict(request.fixed_params)
+            )
+
+            return ml_service_pb2.TuneHyperparametersResponse(
+                job_id=job_id,
+                status="started",
+                response=common_pb2.Response(
+                    success=True,
+                    message=f"Hyperparameter tuning started for {request.model_type}"
+                )
+            )
+
+        except Exception as e:
+            logger.error("Error starting hyperparameter tuning: %s", e)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return ml_service_pb2.TuneHyperparametersResponse(
+                status="failed",
+                response=common_pb2.Response(
+                    success=False,
+                    message=str(e)
+                )
+            )
+
+    def GetTuningStatus(self, request, context):
+        """Get hyperparameter tuning job status."""
+        try:
+            if not self.tuner:
+                context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+                context.set_details("Hyperparameter tuning not available")
+                return ml_service_pb2.TuningStatusResponse()
+
+            status = self.tuner.get_status(request.job_id)
+            if not status:
+                context.set_code(grpc.StatusCode.NOT_FOUND)
+                context.set_details(f"Tuning job {request.job_id} not found")
+                return ml_service_pb2.TuningStatusResponse()
+
+            # Separate best params into float and int maps
+            best_params_float = {}
+            best_params_int = {}
+            for k, v in status.get("best_params", {}).items():
+                if isinstance(v, int):
+                    best_params_int[k] = v
+                else:
+                    best_params_float[k] = float(v)
+
+            # Convert trial results
+            trials = []
+            for trial in status.get("trial_results", []):
+                params_float = {}
+                params_int = {}
+                for k, v in trial.get("params", {}).items():
+                    if isinstance(v, int):
+                        params_int[k] = v
+                    else:
+                        params_float[k] = float(v)
+
+                trials.append(
+                    ml_service_pb2.TrialResult(
+                        number=trial["number"],
+                        value=trial["value"] if trial["value"] is not None else 0.0,
+                        params_float=params_float,
+                        params_int=params_int,
+                        state=trial["state"]
+                    )
+                )
+
+            return ml_service_pb2.TuningStatusResponse(
+                job_id=status["job_id"],
+                model_type=status["model_type"],
+                status=status["status"],
+                trials_completed=status["trials_completed"],
+                trials_total=status["n_trials"],
+                best_params_float=best_params_float,
+                best_params_int=best_params_int,
+                best_value=status["best_value"] if status["best_value"] != float('inf') else 0.0,
+                trials=trials,
+                error=status.get("error", ""),
+                response=common_pb2.Response(
+                    success=True,
+                    message="Tuning status retrieved"
+                )
+            )
+
+        except Exception as e:
+            logger.error("Error getting tuning status: %s", e)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return ml_service_pb2.TuningStatusResponse()
 
     def HealthCheck(self, request, context):
         """Health check endpoint"""

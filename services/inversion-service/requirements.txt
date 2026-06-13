@@ -5,6 +5,7 @@ pydantic==2.5.0
 pydantic-settings==2.1.0
 numpy==1.24.3
 scipy==1.11.4
+pywavelets==1.5.0
 # Result serialization & storage (optional, degrade gracefully if absent)
 minio==7.2.0
 netCDF4==1.6.5

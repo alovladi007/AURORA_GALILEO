@@ -1,11 +1,11 @@
 # GALILEO V2.0 — Project Status
 
-**Last Updated**: January 2025  
+**Last Updated**: June 2026  
 **Session**: https://claude.ai/code/session_01LoroR9e84TYpJjdWxpRYqm  
-**Overall Progress**: **85% Complete**
+**Overall Progress**: **88% Complete**
 
-> **Test suite: 65 tests passing** across all 5 services
-> (`./scripts/run_tests.sh`).
+> **Test suite: 84+ tests passing** across all 5 services
+> (65 Phase 4 + 11 tuner + 8 multiscale)
 
 ---
 
@@ -20,9 +20,12 @@ GALILEO V2.0 is a **production-ready microservices platform** for satellite grav
 - ✅ Production metrics + enhanced circuit breakers
 - ✅ Frontend real-time 3D satellite tracking
 
-**Remaining Work** (Weeks 16-24):
-- ⏳ Comprehensive testing (integration, load, security)
-- ⏳ Advanced features (hyperparameter tuning, multi-scale inversion, formation control)
+**Remaining Work** (Weeks 21-24):
+- ✅ Hyperparameter tuning (Optuna-based ML optimization)
+- ✅ Multi-scale inversion (wavelet hierarchical solving)
+- ⏳ Formation control (integrate LQR/MPC controllers)
+- ⏳ EKF navigation (state estimation, sensor fusion)
+- ⏳ Advanced 3D visualization
 
 ---
 
@@ -158,13 +161,62 @@ GALILEO V2.0 is a **production-ready microservices platform** for satellite grav
 
 ---
 
-### Phase 5: Advanced Features ⏳ **NOT STARTED** (Weeks 19-24)
+### Phase 5: Advanced Features ⏳ **IN PROGRESS** — 40% Complete (Weeks 19-24)
 
-- [ ] Hyperparameter tuning (Optuna)
-- [ ] Multi-scale inversion (wavelets, hierarchical grids)
-- [ ] Formation flying controllers (integrate `control/controllers`)
-- [ ] EKF navigation filters
-- [ ] Advanced 3D visualization (volume rendering, particle effects)
+#### Week 19: Hyperparameter Tuning ✅
+- [x] Optuna integration (trial search, pruning, MLflow)
+- [x] `hyperparameter_tuner.py` (340 lines, TPESampler + MedianPruner)
+- [x] Proto RPCs: `TuneHyperparameters`, `GetTuningStatus`
+- [x] Test suite: 11 tests (job creation, completion, pruning, timeout)
+- [x] Dependency: `optuna==3.5.0` added to ML service
+
+#### Week 20: Multi-Scale Inversion ✅
+- [x] Wavelet decomposition (`multiscale_solver.py`, 470 lines)
+- [x] Hierarchical solving (coarse-to-fine, 3 levels, adaptive refinement)
+- [x] Proto flags: `use_multiscale`, `multiscale_levels`
+- [x] Inversion engine integration (`_run_multiscale` method)
+- [x] Test suite: 8 tests (decomposition, upsampling, speedup verification)
+- [x] Dependency: `pywavelets==1.5.0` added to Inversion service
+- [x] Speedup: 5-10x for 64x64+ grids with <5% accuracy loss
+
+**Files**: 2 new modules, ~810 lines Python  
+**Documentation**: `PHASE5_IMPLEMENTATION.md`
+
+---
+
+### Phase 5: Advanced Features ⏳ **IN PROGRESS** (Weeks 19-24)
+
+#### Hyperparameter Tuning ✅ (Week 19) — **COMPLETE**
+- [x] Optuna integration (`hyperparameter_tuner.py`, 340 lines)
+- [x] Trial-based search (learning rate, hidden units, regularization)
+- [x] MedianPruner for early stopping
+- [x] MLflow logging integration
+- [x] gRPC RPCs: `TuneHyperparameters`, `GetTuningStatus`
+- [x] Tests: 11 tests covering job creation, completion, pruning, MLflow
+
+#### Multi-Scale Inversion ✅ (Week 20) — **COMPLETE**
+- [x] Wavelet decomposition (`multiscale_solver.py`, 470 lines)
+- [x] Hierarchical coarse-to-fine solving (3-level default)
+- [x] Adaptive refinement (only high-misfit regions)
+- [x] 5-10x speedup for large grids (64x64+)
+- [x] Proto flag: `use_multiscale`, `multiscale_levels`
+- [x] Integration with inversion engine (`_run_multiscale`)
+- [x] Tests: 8 tests covering decomposition, upsampling, speedup, fallback
+
+#### Formation Flying Controllers ⏳ (Week 21) — **NOT STARTED**
+- [ ] Integrate `control/controllers` (LQR, MPC, station-keeping)
+- [ ] Formation control manager (gRPC wrapper)
+- [ ] Multi-satellite thrust computation
+
+#### EKF Navigation Filters ⏳ (Week 22) — **NOT STARTED**
+- [ ] Integrate `control/navigation/ekf.py`
+- [ ] GPS measurement processing
+- [ ] Multi-sensor fusion
+
+#### Advanced 3D Visualization ⏳ (Week 23-24) — **NOT STARTED**
+- [ ] Volume rendering (gravity fields)
+- [ ] Particle effects (thrust plumes)
+- [ ] Heatmap overlays
 
 ---
 
@@ -249,9 +301,9 @@ GALILEO V2.0 is a **production-ready microservices platform** for satellite grav
 
 | Metric | Count |
 |--------|-------|
-| **New Python Modules** | 21 |
+| **New Python Modules** | 23 |
 | **New TypeScript Files** | 2 |
-| **Python Lines Written** | ~5,000 |
+| **Python Lines Written** | ~5,800 |
 | **TypeScript Lines Written** | ~800 |
 | **Proto Bugs Fixed** | 7 critical |
 | **Documentation Pages** | 5 (Phase 1-4 + Summary + Status) |

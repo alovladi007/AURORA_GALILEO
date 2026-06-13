@@ -15,6 +15,8 @@ message InversionParameters {
   string prior_model = 5;
   map<string, double> constraints = 6;
   bool use_gpu = 7;
+  bool use_multiscale = 13;  // Enable wavelet-based hierarchical inversion
+  int32 multiscale_levels = 14;  // Number of decomposition levels (default: 3)
 }
 
 // Grid specification

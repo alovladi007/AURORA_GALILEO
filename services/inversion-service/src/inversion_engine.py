@@ -24,6 +24,14 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# Optional multiscale solver
+try:
+    from src.multiscale_solver import MultiscaleInversionEngine
+    _HAS_MULTISCALE = True
+except ImportError:
+    _HAS_MULTISCALE = False
+    logger.warning("Multiscale solver not available (pywavelets not installed)")
+
 
 # ---------------------------------------------------------------------------
 # Forward gravity operator
@@ -347,13 +355,26 @@ class InversionEngine:
                 clean = G @ true_model
                 data = clean + noise * np.linalg.norm(clean) / np.sqrt(len(clean)) * rng.standard_normal(len(clean))
 
-            itype = job.inversion_type.lower()
-            if itype in ("bayesian", "map"):
-                result = self._run_bayesian(job, G, data, true_model)
-            elif itype in ("gauss_newton", "gauss-newton", "gn"):
-                result = self._run_gauss_newton(job, G, L, data, max_iter)
-            else:  # tikhonov / least_squares / spherical_harmonics / default
-                result = self._run_tikhonov(job, G, L, data)
+            # Check if multiscale solving is requested
+            use_multiscale = cfg.get("use_multiscale", "false").lower() == "true"
+            multiscale_levels = int(cfg.get("multiscale_levels", 3))
+
+            if use_multiscale and _HAS_MULTISCALE and n_rows >= 16 and n_cols >= 16:
+                # Use hierarchical multiscale solver
+                job.message = "Running multi-scale inversion"
+                result = self._run_multiscale(
+                    job, data, (n_rows, n_cols),
+                    multiscale_levels, rng, job.inversion_type
+                )
+            else:
+                # Standard single-scale solvers
+                itype = job.inversion_type.lower()
+                if itype in ("bayesian", "map"):
+                    result = self._run_bayesian(job, G, data, true_model)
+                elif itype in ("gauss_newton", "gauss-newton", "gn"):
+                    result = self._run_gauss_newton(job, G, L, data, max_iter)
+                else:  # tikhonov / least_squares / spherical_harmonics / default
+                    result = self._run_tikhonov(job, G, L, data)
 
             if job.status == "cancelled":
                 return
@@ -434,6 +455,84 @@ class InversionEngine:
         job.residual = result["residual"]
         job.progress = 0.95
         return result
+
+    def _run_multiscale(
+        self,
+        job: InversionJob,
+        data: np.ndarray,
+        grid_shape: tuple[int, int],
+        levels: int,
+        rng: np.random.Generator,
+        method: str
+    ) -> Dict:
+        """Run multi-scale hierarchical inversion."""
+        job.message = f"Multi-scale inversion ({levels} levels)"
+        job.progress = 0.1
+
+        # Operator builder for different grid sizes
+        def operator_builder(shape):
+            n_obs = data.size
+            return build_point_mass_operator(shape, n_obs, rng=rng)
+
+        # Create multiscale solver
+        ms_solver = MultiscaleInversionEngine(
+            levels=levels,
+            wavelet="db4",
+            refinement_threshold=0.1,
+            max_active_fraction=0.3
+        )
+
+        # Determine base method
+        base_method = "tikhonov"
+        if method.lower() in ("gauss_newton", "gauss-newton", "gn"):
+            base_method = "gauss_newton"
+
+        # Regularization parameter
+        lambda_reg = float(job.config.get("lambda", 0.1))
+
+        # Run multi-scale solve
+        logger.info(
+            f"Starting {levels}-level multiscale inversion on {grid_shape} grid"
+        )
+
+        try:
+            ms_result = ms_solver.solve_multiscale(
+                observations=data,
+                operator_builder=operator_builder,
+                grid_shape=grid_shape,
+                method=base_method,
+                lambda_reg=lambda_reg,
+                tolerance=1e-3
+            )
+
+            job.current_iteration = ms_result.iterations
+            job.total_iterations = ms_result.iterations
+            job.residual = ms_result.misfit
+            job.progress = 0.95
+
+            # Store multiscale metrics
+            job.config["multiscale_speedup"] = f"{ms_result.speedup_factor:.1f}x"
+            job.config["refinement_levels"] = str(ms_result.refinement_levels)
+
+            logger.info(
+                f"Multiscale solve complete: {ms_result.speedup_factor:.1f}x speedup, "
+                f"misfit={ms_result.misfit:.4f}"
+            )
+
+            return {
+                "model": ms_result.model,
+                "residual": ms_result.misfit,
+                "predicted_data": data - ms_result.residuals,
+                "lambda": lambda_reg,
+                "iterations": ms_result.iterations
+            }
+
+        except Exception as e:
+            logger.error(f"Multiscale solve failed: {e}, falling back to single-scale")
+            # Fallback to single-scale
+            G = operator_builder(grid_shape)
+            L = laplacian_regularizer(grid_shape)
+            return self._run_tikhonov(job, G, L, data)
 
     @staticmethod
     def _synthetic_anomaly(grid_shape: tuple[int, int]) -> np.ndarray:

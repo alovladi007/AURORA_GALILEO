@@ -210,6 +210,48 @@ message PredictionResponse {
   repeated PredictionResult predictions = 1;
 }
 
+// Hyperparameter tuning
+message TuneHyperparametersRequest {
+  string model_type = 1;
+  int32 n_trials = 2;
+  int32 timeout_seconds = 3;
+  map<string, string> fixed_params = 4;
+  galileo.common.UserContext user_context = 5;
+}
+
+message TuneHyperparametersResponse {
+  string job_id = 1;
+  string status = 2;
+  galileo.common.Response response = 3;
+}
+
+message TrialResult {
+  int32 number = 1;
+  double value = 2;
+  map<string, double> params_float = 3;
+  map<string, int32> params_int = 4;
+  string state = 5;  // "COMPLETE", "PRUNED", "FAIL"
+}
+
+message TuningStatusRequest {
+  string job_id = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message TuningStatusResponse {
+  string job_id = 1;
+  string model_type = 2;
+  string status = 3;  // "queued", "running", "completed", "failed"
+  int32 trials_completed = 4;
+  int32 trials_total = 5;
+  map<string, double> best_params_float = 6;
+  map<string, int32> best_params_int = 7;
+  double best_value = 8;
+  repeated TrialResult trials = 9;
+  string error = 10;
+  galileo.common.Response response = 11;
+}
+
 // ML Service
 service MLService {
   // Training operations (using simplified messages for mock implementation)
@@ -227,6 +269,10 @@ service MLService {
   rpc DeployModel(DeployModelRequest) returns (DeployModelResponse);
   rpc EvaluateModel(EvaluateModelRequest) returns (EvaluateModelResponse);
   rpc DeleteModel(DeleteModelRequest) returns (DeleteModelResponse);
+
+  // Hyperparameter tuning
+  rpc TuneHyperparameters(TuneHyperparametersRequest) returns (TuneHyperparametersResponse);
+  rpc GetTuningStatus(TuningStatusRequest) returns (TuningStatusResponse);
 
   // Health check
   rpc HealthCheck(galileo.common.HealthCheckRequest) returns (galileo.common.HealthCheckResponse);
