@@ -20,6 +20,13 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from src.propagator import propagate, circular_state, R_EARTH
 from src.mission import MissionManager
 
+try:
+    from src.formation_controller import FormationControlManager, FormationState, ThrustCommand
+    _HAS_FORMATION = True
+except ImportError:
+    _HAS_FORMATION = False
+    logger.warning("Formation controller not available (JAX not installed or repo structure issue)")
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,6 +56,10 @@ class ControlServicer(control_service_pb2_grpc.ControlServiceServicer):
 
     def __init__(self):
         self.manager = MissionManager()
+        if _HAS_FORMATION:
+            self.formation_manager = FormationControlManager()
+        else:
+            self.formation_manager = None
 
     # ------------------------------------------------------------------
     # Mission planning
@@ -214,6 +225,212 @@ class ControlServicer(control_service_pb2_grpc.ControlServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return control_service_pb2.SimulationStatusResponse()
+
+    # ------------------------------------------------------------------
+    # Formation Flying Control
+    # ------------------------------------------------------------------
+    def CreateFormation(self, request, context):
+        """Create a formation flying controller."""
+        try:
+            if not self.formation_manager:
+                context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+                context.set_details("Formation control not available (JAX not installed)")
+                return control_service_pb2.CreateFormationResponse(
+                    response=_response(503, "Formation control not available")
+                )
+
+            logger.info(
+                f"Creating {request.controller_type} controller for formation {request.formation_id}"
+            )
+
+            # Convert config maps to single dict
+            config = {k: float(v) for k, v in request.config_float.items()}
+            config.update({k: int(v) for k, v in request.config_int.items()})
+
+            result = self.formation_manager.create_controller(
+                formation_id=request.formation_id,
+                controller_type=request.controller_type,
+                mean_motion=request.mean_motion,
+                num_satellites=request.num_satellites,
+                config=config
+            )
+
+            return control_service_pb2.CreateFormationResponse(
+                formation_id=result["formation_id"],
+                controller_type=result["controller_type"],
+                mean_motion=result["mean_motion"],
+                num_satellites=result["num_satellites"],
+                response=_response(
+                    200,
+                    f"Formation controller created: {request.controller_type}",
+                    {"mean_motion": f"{request.mean_motion:.6f}"}
+                )
+            )
+
+        except Exception as e:
+            logger.error(f"Error creating formation controller: {e}")
+            return control_service_pb2.CreateFormationResponse(
+                response=_response(500, f"Error: {e}")
+            )
+
+    def ComputeFormationControl(self, request, context):
+        """Compute formation control thrust commands."""
+        try:
+            if not self.formation_manager:
+                context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+                context.set_details("Formation control not available")
+                return control_service_pb2.FormationControlResponse()
+
+            # Convert proto states to FormationState objects
+            states = []
+            for s in request.satellite_states:
+                states.append(FormationState(
+                    satellite_id=s.satellite_id,
+                    position=np.array([
+                        s.relative_position.x,
+                        s.relative_position.y,
+                        s.relative_position.z
+                    ]),
+                    velocity=np.array([
+                        s.relative_velocity.x,
+                        s.relative_velocity.y,
+                        s.relative_velocity.z
+                    ])
+                ))
+
+            # Reference state (optional)
+            reference = None
+            if request.HasField("reference_state"):
+                ref = request.reference_state
+                reference = FormationState(
+                    satellite_id="reference",
+                    position=np.array([
+                        ref.relative_position.x,
+                        ref.relative_position.y,
+                        ref.relative_position.z
+                    ]),
+                    velocity=np.array([
+                        ref.relative_velocity.x,
+                        ref.relative_velocity.y,
+                        ref.relative_velocity.z
+                    ])
+                )
+
+            # Compute control
+            commands = self.formation_manager.compute_control(
+                formation_id=request.formation_id,
+                states=states,
+                reference=reference
+            )
+
+            # Convert to proto
+            proto_commands = []
+            for cmd in commands:
+                proto_commands.append(
+                    control_service_pb2.ThrustCommand(
+                        satellite_id=cmd.satellite_id,
+                        thrust=common_pb2.Vector3(
+                            x=float(cmd.thrust[0]),
+                            y=float(cmd.thrust[1]),
+                            z=float(cmd.thrust[2])
+                        ),
+                        duration=cmd.duration,
+                        timestamp=datetime_to_timestamp(cmd.timestamp)
+                    )
+                )
+
+            return control_service_pb2.FormationControlResponse(
+                formation_id=request.formation_id,
+                commands=proto_commands,
+                response=_response(
+                    200,
+                    f"Computed {len(commands)} thrust commands",
+                    {"num_satellites": len(commands)}
+                )
+            )
+
+        except Exception as e:
+            logger.error(f"Error computing formation control: {e}")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return control_service_pb2.FormationControlResponse()
+
+    def GetFormationInfo(self, request, context):
+        """Get formation controller information."""
+        try:
+            if not self.formation_manager:
+                context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+                return control_service_pb2.FormationInfo()
+
+            info = self.formation_manager.get_controller_info(request.formation_id)
+            if not info:
+                context.set_code(grpc.StatusCode.NOT_FOUND)
+                context.set_details(f"Formation {request.formation_id} not found")
+                return control_service_pb2.FormationInfo()
+
+            return control_service_pb2.FormationInfo(
+                formation_id=request.formation_id,
+                controller_type=info["controller_type"],
+                mean_motion=info["mean_motion"],
+                num_satellites=info["num_satellites"],
+                created_at=datetime_to_timestamp(info["created_at"])
+            )
+
+        except Exception as e:
+            logger.error(f"Error getting formation info: {e}")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return control_service_pb2.FormationInfo()
+
+    def ListFormations(self, request, context):
+        """List all formation controllers."""
+        try:
+            if not self.formation_manager:
+                return control_service_pb2.ListFormationsResponse()
+
+            formations = self.formation_manager.list_formations()
+
+            proto_formations = []
+            for f in formations:
+                proto_formations.append(
+                    control_service_pb2.FormationInfo(
+                        formation_id=f["formation_id"],
+                        controller_type=f["controller_type"],
+                        mean_motion=f["mean_motion"],
+                        num_satellites=f["num_satellites"],
+                        created_at=datetime_to_timestamp(f["created_at"])
+                    )
+                )
+
+            return control_service_pb2.ListFormationsResponse(
+                formations=proto_formations,
+                response=_response(200, f"Found {len(formations)} formations")
+            )
+
+        except Exception as e:
+            logger.error(f"Error listing formations: {e}")
+            return control_service_pb2.ListFormationsResponse()
+
+    def DeleteFormation(self, request, context):
+        """Delete a formation controller."""
+        try:
+            if not self.formation_manager:
+                context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+                return control_service_pb2.DeleteFormationResponse(success=False)
+
+            success = self.formation_manager.delete_controller(request.formation_id)
+
+            return control_service_pb2.DeleteFormationResponse(
+                success=success,
+                response=_response(
+                    200 if success else 404,
+                    f"Formation {'deleted' if success else 'not found'}"
+                )
+            )
+
+        except Exception as e:
+            logger.error(f"Error deleting formation: {e}")
+            return control_service_pb2.DeleteFormationResponse(success=False)
 
     # ------------------------------------------------------------------
     # Health

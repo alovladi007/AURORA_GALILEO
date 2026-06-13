@@ -235,6 +235,86 @@ message SimulationStatusResponse {
   string message = 5;
 }
 
+// Formation flying control
+message RelativeState {
+  string satellite_id = 1;
+  galileo.common.Vector3 relative_position = 2;  // km, relative to reference
+  galileo.common.Vector3 relative_velocity = 3;  // km/s, relative to reference
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+message ThrustCommand {
+  string satellite_id = 1;
+  galileo.common.Vector3 thrust = 2;  // N
+  double duration = 3;  // seconds
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+message CreateFormationRequest {
+  string formation_id = 1;
+  string controller_type = 2;  // "lqr", "lqg", "mpc", "station_keeping"
+  double mean_motion = 3;  // rad/s (e.g., 0.001 for LEO)
+  int32 num_satellites = 4;
+  map<string, double> config_float = 5;  // Q_diag, R_diag, etc.
+  map<string, int32> config_int = 6;  // horizon, etc.
+  galileo.common.UserContext user_context = 7;
+}
+
+message CreateFormationResponse {
+  string formation_id = 1;
+  string controller_type = 2;
+  double mean_motion = 3;
+  int32 num_satellites = 4;
+  galileo.common.Response response = 5;
+}
+
+message ComputeFormationControlRequest {
+  string formation_id = 1;
+  repeated RelativeState satellite_states = 2;
+  RelativeState reference_state = 3;  // optional, defaults to origin
+  galileo.common.UserContext user_context = 4;
+}
+
+message FormationControlResponse {
+  string formation_id = 1;
+  repeated ThrustCommand commands = 2;
+  galileo.common.Response response = 3;
+}
+
+message GetFormationInfoRequest {
+  string formation_id = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message FormationInfo {
+  string formation_id = 1;
+  string controller_type = 2;
+  double mean_motion = 3;
+  int32 num_satellites = 4;
+  google.protobuf.Timestamp created_at = 5;
+  map<string, double> config_float = 6;
+  map<string, int32> config_int = 7;
+}
+
+message ListFormationsRequest {
+  galileo.common.UserContext user_context = 1;
+}
+
+message ListFormationsResponse {
+  repeated FormationInfo formations = 1;
+  galileo.common.Response response = 2;
+}
+
+message DeleteFormationRequest {
+  string formation_id = 1;
+  galileo.common.UserContext user_context = 2;
+}
+
+message DeleteFormationResponse {
+  bool success = 1;
+  galileo.common.Response response = 2;
+}
+
 // Control Service
 service ControlService {
   // Satellite operations
@@ -259,6 +339,13 @@ service ControlService {
 
   // Health check
   rpc HealthCheck(galileo.common.HealthCheckRequest) returns (galileo.common.HealthCheckResponse);
+
+  // Formation flying control
+  rpc CreateFormation(CreateFormationRequest) returns (CreateFormationResponse);
+  rpc ComputeFormationControl(ComputeFormationControlRequest) returns (FormationControlResponse);
+  rpc GetFormationInfo(GetFormationInfoRequest) returns (FormationInfo);
+  rpc ListFormations(ListFormationsRequest) returns (ListFormationsResponse);
+  rpc DeleteFormation(DeleteFormationRequest) returns (DeleteFormationResponse);
 
   // Mock simplified methods (non-duplicate)
   rpc GetMissionPlan(MissionPlanQuery) returns (MissionPlan);

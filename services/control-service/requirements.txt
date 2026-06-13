@@ -4,4 +4,6 @@ protobuf==4.24.4
 pydantic==2.5.0
 pydantic-settings==2.1.0
 numpy==1.24.3
+jax==0.4.23
+jaxlib==0.4.23
 scipy==1.11.4
