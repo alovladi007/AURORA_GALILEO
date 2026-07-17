@@ -126,3 +126,6 @@ ui/public/index.cjs
 
 # Test pages
 ui/src/app/test-cesium/
+
+# TypeScript incremental build info
+*.tsbuildinfo
