@@ -1,0 +1,13 @@
+site_name: GALILEO V2.0
+site_description: Space-based geophysical sensing platform
+repo_url: https://github.com/alovladi007/AURORA_GALILEO
+
+docs_dir: docs
+
+theme:
+  name: material
+
+nav:
+  - Home: README.md
+
+plugins: []

@@ -129,3 +129,4 @@ ui/src/app/test-cesium/
 
 # TypeScript incremental build info
 *.tsbuildinfo
+site/
