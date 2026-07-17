@@ -295,9 +295,9 @@ class TestSimulateOrbitalRanging:
 
     def test_basic_simulation(self):
         """Test basic orbital ranging simulation."""
-        # Note: This test may fail if time.clock module is not available
+        # Note: This test may fail if gtime.clock module is not available
         # We'll skip the Allan deviation check for now
-        pytest.skip("Allan deviation calculation requires time.clock module")
+        pytest.skip("Allan deviation calculation requires gtime.clock module")
 
         results = simulate_orbital_ranging(
             baseline=200e3,

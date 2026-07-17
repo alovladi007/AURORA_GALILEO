@@ -9,7 +9,7 @@ dual-clock fusion via Extended Kalman Filter (EKF).
 import numpy as np
 from dataclasses import dataclass
 from typing import Optional, Tuple
-from time.clock import ClockModel
+from gtime.clock import ClockModel
 
 
 @dataclass
@@ -377,7 +377,7 @@ def analyze_disciplined_performance(
     Returns:
         Dictionary with performance metrics
     """
-    from time.clock import allan_deviation
+    from gtime.clock import allan_deviation
 
     # Allan deviations
     tau_undis, sigma_undis = allan_deviation(undisciplined_phase, dt)

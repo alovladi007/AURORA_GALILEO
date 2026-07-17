@@ -27,7 +27,7 @@ from cal_maneuvers import (CalibrationManeuverGenerator, SyntheticOrbitGenerator
 class ValidationSuite:
     """Comprehensive validation of calibration tools."""
     
-    def __init__(self, output_dir: str = "/home/claude/orbit_determination/validation_results"):
+    def __init__(self, output_dir: str = "docs/validation_results"):
         """Initialize validation suite."""
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)

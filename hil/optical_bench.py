@@ -322,7 +322,7 @@ def simulate_orbital_ranging(
     results['range_errors'] = results['range_estimates'] - results['true_ranges']
 
     # Allan deviation of range
-    from time.clock import allan_deviation
+    from gtime.clock import allan_deviation
     dt = 1.0 / sampling_rate
     tau, sigma = allan_deviation(results['range_errors'], dt)
     results['allan_tau'] = tau

@@ -6,7 +6,7 @@ import pytest
 import numpy as np
 from datetime import datetime
 
-from time.timescales import (
+from gtime.timescales import (
     TimeScale,
     tai_to_tt,
     tt_to_tai,
@@ -67,8 +67,12 @@ class TestTimeScaleConversions:
         offset = get_leap_second_offset(57754.0)
         assert offset == -37.0
 
-        # MJD 57000 = 2015-01-01 (before 2017 leap), UTC-TAI = -36s
+        # MJD 57000 = 2014-12-09 (before the 2015-07-01 leap), UTC-TAI = -35s
         offset = get_leap_second_offset(57000.0)
+        assert offset == -35.0
+
+        # MJD 57300 = 2015-10-05 (after the 2015-07-01 leap), UTC-TAI = -36s
+        offset = get_leap_second_offset(57300.0)
         assert offset == -36.0
 
     def test_utc_tai_conversion(self):

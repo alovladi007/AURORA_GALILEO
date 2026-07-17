@@ -87,15 +87,26 @@ def propagate_orbit(self, initial_state, duration, time_step=10.0, perturbations
         Dictionary with trajectory data
     """
     try:
-        from sim.keplerian import propagate_j2
+        import jax.numpy as jnp
+        from sim.dynamics.keplerian import two_body_dynamics
+        from sim.dynamics.perturbations import j2_acceleration
+        from sim.dynamics.propagators import propagate_orbit as _propagate
 
         self.update_state(state='RUNNING', meta={'progress': 0})
 
-        # Run propagation
-        times, states = propagate_j2(
-            initial_state,
-            duration,
-            time_step
+        include_j2 = perturbations is None or 'j2' in perturbations
+
+        def dynamics(t, state):
+            deriv = two_body_dynamics(t, state)
+            if include_j2:
+                deriv = deriv.at[3:6].add(j2_acceleration(state[:3]))
+            return deriv
+
+        times, states = _propagate(
+            dynamics,
+            jnp.asarray(initial_state, dtype=jnp.float64),
+            t_span=(0.0, float(duration)),
+            dt=float(time_step),
         )
 
         self.update_state(state='RUNNING', meta={'progress': 100})
@@ -125,19 +136,39 @@ def propagate_formation(self, n_satellites, baseline_m, duration, time_step=10.0
         Dictionary with formation trajectory data
     """
     try:
-        from sim.relative import propagate_hcw_formation
+        import numpy as np
+        import jax.numpy as jnp
+        from sim.dynamics.keplerian import mean_motion
+        from sim.dynamics.relative import hill_clohessy_wiltshire_dynamics
+        from sim.dynamics.propagators import propagate_orbit as _propagate
 
         self.update_state(state='RUNNING', meta={'progress': 0})
 
-        # Run formation propagation
-        result = propagate_hcw_formation(
-            n_satellites,
-            baseline_m,
-            duration,
-            time_step
-        )
+        # Leader in a 500 km circular reference orbit; followers offset
+        # along-track by multiples of the baseline (km-based sim units).
+        a_ref_km = 6378.137 + 500.0
+        n = mean_motion(a_ref_km)
+        baseline_km = float(baseline_m) / 1000.0
+
+        satellites = []
+        for i in range(int(n_satellites)):
+            delta0 = jnp.array([0.0, i * baseline_km, 0.0, 0.0, 0.0, 0.0])
+            times, states = _propagate(
+                lambda t, s: hill_clohessy_wiltshire_dynamics(t, s, n),
+                delta0,
+                t_span=(0.0, float(duration)),
+                dt=float(time_step),
+            )
+            satellites.append(np.asarray(states).tolist())
 
         self.update_state(state='RUNNING', meta={'progress': 100})
+
+        result = {
+            'times': np.asarray(times).tolist(),
+            'satellites': satellites,
+            'mean_motion_rad_s': float(n),
+            'n_satellites': int(n_satellites),
+        }
 
         return result
 
@@ -163,20 +194,19 @@ def compute_gravity_field(self, observations, grid_resolution=10, method='tikhon
         Dictionary with gravity field data
     """
     try:
-        from inversion.solvers import tikhonov_inversion
+        # Real solver exists (inversion.solvers.TikhonovSolver) but the
+        # observation-schema -> forward-operator wiring is Phase 3 (W3.3)
+        # of MASTER_BUILD_PROMPT_18_MONTHS.md. Fail honestly rather than
+        # report success for work that was never performed.
+        from inversion.solvers import TikhonovSolver  # noqa: F401
 
-        self.update_state(state='RUNNING', meta={'progress': 0})
-
-        # Run inversion
-        # (Implementation would go here)
-
-        self.update_state(state='RUNNING', meta={'progress': 100})
-
-        return {
-            'grid_resolution': grid_resolution,
-            'method': method,
-            'n_observations': len(observations)
-        }
+        raise NotImplementedError(
+            "compute_gravity_field: observation ingestion -> forward "
+            "operator wiring not yet implemented (see "
+            "MASTER_BUILD_PROMPT_18_MONTHS.md Phase 3 W3.3). "
+            f"Received {len(observations)} observations, "
+            f"grid_resolution={grid_resolution}, method={method}."
+        )
 
     except Exception as e:
         self.update_state(state='FAILURE', meta={'error': str(e)})
@@ -200,26 +230,17 @@ def train_pinn(self, model_id, training_data, epochs=100):
         Training results
     """
     try:
-        from ml.pinn import PINN
+        # Real trainer exists (ml.pinn.PINNTrainer) but the task-queue
+        # wiring (dataset loading, checkpointing, registry) is Phase 4
+        # (W4.1) of MASTER_BUILD_PROMPT_18_MONTHS.md. Fail honestly
+        # rather than emit fake epoch progress with no training.
+        from ml.pinn import GravityPINN, PINNTrainer  # noqa: F401
 
-        self.update_state(state='RUNNING', meta={'progress': 0, 'epoch': 0})
-
-        # Load or create model
-        # (Implementation would go here)
-
-        for epoch in range(epochs):
-            # Training step
-            progress = int((epoch + 1) / epochs * 100)
-            self.update_state(
-                state='RUNNING',
-                meta={'progress': progress, 'epoch': epoch + 1}
-            )
-
-        return {
-            'model_id': model_id,
-            'final_epoch': epochs,
-            'status': 'completed'
-        }
+        raise NotImplementedError(
+            "train_pinn: task-queue training wiring not yet implemented "
+            "(see MASTER_BUILD_PROMPT_18_MONTHS.md Phase 4 W4.1). "
+            f"Requested model_id={model_id}, epochs={epochs}."
+        )
 
     except Exception as e:
         self.update_state(state='FAILURE', meta={'error': str(e)})
@@ -239,23 +260,16 @@ def train_unet(self, model_id, training_data, epochs=50):
         Training results
     """
     try:
-        from ml.unet import UNet
+        # Real trainer exists (ml.unet.UNetTrainer) but the task-queue
+        # wiring is Phase 4 (W4.1) of MASTER_BUILD_PROMPT_18_MONTHS.md.
+        # Fail honestly rather than emit fake epoch progress.
+        from ml.unet import UNetGravity, UNetTrainer  # noqa: F401
 
-        self.update_state(state='RUNNING', meta={'progress': 0, 'epoch': 0})
-
-        # Training loop
-        for epoch in range(epochs):
-            progress = int((epoch + 1) / epochs * 100)
-            self.update_state(
-                state='RUNNING',
-                meta={'progress': progress, 'epoch': epoch + 1}
-            )
-
-        return {
-            'model_id': model_id,
-            'final_epoch': epochs,
-            'status': 'completed'
-        }
+        raise NotImplementedError(
+            "train_unet: task-queue training wiring not yet implemented "
+            "(see MASTER_BUILD_PROMPT_18_MONTHS.md Phase 4 W4.1). "
+            f"Requested model_id={model_id}, epochs={epochs}."
+        )
 
     except Exception as e:
         self.update_state(state='FAILURE', meta={'error': str(e)})
@@ -280,26 +294,16 @@ def execute_mission_workflow(self, workflow_config):
         self.update_state(state='RUNNING', meta={'progress': 0, 'stage': 'initialization'})
 
         stages = workflow_config.get('stages', [])
-        total_stages = len(stages)
 
-        for i, stage in enumerate(stages):
-            stage_name = stage.get('name', f'stage_{i}')
-            self.update_state(
-                state='RUNNING',
-                meta={
-                    'progress': int((i + 1) / total_stages * 100),
-                    'stage': stage_name
-                }
-            )
-
-            # Execute stage
-            # (Implementation would call appropriate tasks)
-
-        return {
-            'workflow_id': workflow_config.get('workflow_id'),
-            'stages_completed': total_stages,
-            'status': 'completed'
-        }
+        # Stage dispatch to real tasks is Phase 3 (W3.1) of
+        # MASTER_BUILD_PROMPT_18_MONTHS.md. Fail honestly rather than
+        # mark stages "completed" without executing anything.
+        raise NotImplementedError(
+            "execute_mission_workflow: stage dispatch not yet implemented "
+            "(see MASTER_BUILD_PROMPT_18_MONTHS.md Phase 3 W3.1). "
+            f"Received {len(stages)} stages for workflow_id="
+            f"{workflow_config.get('workflow_id')}."
+        )
 
     except Exception as e:
         self.update_state(state='FAILURE', meta={'error': str(e)})

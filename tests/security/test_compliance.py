@@ -12,6 +12,17 @@ import os
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
+import pytest
+
+try:
+    import cryptography.exceptions  # noqa: F401
+except BaseException:  # pyo3 PanicException is not an Exception subclass
+    pytest.skip(
+        "cryptography native bindings unavailable/broken in this "
+        "environment (pyo3 panic on import)",
+        allow_module_level=True,
+    )
+
 from compliance.authorization import (
     AuthorizationManager, Policy, Permission
 )

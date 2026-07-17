@@ -6,9 +6,9 @@ Tests for PINN and U-Net models, training, and uncertainty estimation.
 """
 
 import numpy as np
-import torch
-import sys
-sys.path.insert(0, '/home/claude/geophysics')
+import pytest
+
+torch = pytest.importorskip("torch", reason="PyTorch not installed in this environment")
 
 from ml import (
     GravityPINN,

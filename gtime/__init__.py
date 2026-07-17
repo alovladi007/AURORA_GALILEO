@@ -12,7 +12,7 @@ Modules:
     discipline: Clock discipline via GPSDO and dual-clock fusion
 """
 
-from time.timescales import (
+from gtime.timescales import (
     TimeScale,
     tai_to_tt,
     tt_to_tai,
@@ -24,7 +24,7 @@ from time.timescales import (
     gpst_to_utc,
 )
 
-from time.relativity import (
+from gtime.relativity import (
     relativistic_time_correction,
     relativistic_range_correction,
     shapiro_delay,
@@ -32,7 +32,7 @@ from time.relativity import (
     special_relativistic_correction,
 )
 
-from time.clock import (
+from gtime.clock import (
     ClockModel,
     WhiteNoiseClock,
     FlickerNoiseClock,
@@ -43,7 +43,7 @@ from time.clock import (
     modified_allan_deviation,
 )
 
-from time.discipline import (
+from gtime.discipline import (
     GPSDOModel,
     DualClockFusion,
     clock_discipline_ekf,
