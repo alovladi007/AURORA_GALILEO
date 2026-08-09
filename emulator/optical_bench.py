@@ -24,7 +24,7 @@ class SignalType(Enum):
 class BenchParameters:
     """Physical parameters of the optical bench"""
     baseline_length: float = 1.0  # meters
-    wavelength: float = 632.8e-9  # HeNz-Ne laser (632.8 nm)
+    wavelength: float = 632.8e-9  # He-Ne laser (632.8 nm)
     sampling_rate: float = 1000.0  # Hz
     temperature: float = 293.15  # Kelvin (20°C)
     pressure: float = 101325.0  # Pascal
@@ -55,6 +55,9 @@ class OpticalBenchEmulator:
         self.time_offset = 0.0
         self.fringe_count = 0
         self.thermal_drift_offset = 0.0
+        self._env_cache_t = None
+        self._env_cache = None
+        self._last_visibility = 0.95
         
         # State tracking
         self.running = False
@@ -66,36 +69,71 @@ class OpticalBenchEmulator:
             self.start_time = time.time()
         return time.time() - self.start_time + self.time_offset
     
+    def _environment(self, t: float) -> Dict[str, Dict[str, float]]:
+        """Compute (and cache per-timestamp) the environmental channels
+        so every consumer sees ONE consistent physical state and the
+        thermal random walk advances exactly once per timestamp."""
+        if self._env_cache_t == t and self._env_cache is not None:
+            return self._env_cache
+        env = {
+            "thermal": self.generate_thermal_drift(t),
+            "vibration": self.generate_vibration_signal(t),
+            "laser": self.generate_laser_intensity(t),
+        }
+        self._env_cache_t = t
+        self._env_cache = env
+        return env
+
     def generate_interference_signal(self, t: float) -> Dict[str, float]:
         """
-        Generate interference fringe pattern with realistic characteristics
-        
+        Generate the interference signal with PHYSICAL coupling: the
+        optical path difference is the sum of the piezo scan, thermal
+        expansion/drift, and vibration displacement; the intensity
+        envelope follows the laser power; visibility degrades with
+        vibration jitter. An injected vibration or thermal event
+        therefore shows up in the fringes, not just in its own channel.
+
         Args:
             t: Time in seconds
-            
+
         Returns:
             Dictionary with signal components
         """
-        # Base interference pattern
+        env = self._environment(t)
         k = 2 * np.pi / self.params.wavelength
-        optical_path_diff = self.params.baseline_length * np.sin(0.1 * t)  # Scanning
-        
-        # Phase from optical path difference
-        phase = k * optical_path_diff
-        
-        # Add phase noise
+
+        # Piezo scan: a few wavelengths at 0.5 Hz - resolvable at the
+        # 1 kHz sampling rate (the old +/-1 m sweep was ~3e6 fringes/s,
+        # pure aliasing noise).
+        opd_scan = 2.0 * self.params.wavelength * np.sin(2 * np.pi * 0.5 * t)
+
+        # Thermal contribution: expansion + slow random-walk drift (m)
+        opd_thermal = (env["thermal"]["thermal_expansion"] * 1e-9
+                       + env["thermal"]["thermal_drift"] * 1e-9)
+
+        # Vibration displacement enters the path directly (m)
+        opd_vibration = env["vibration"]["vibration_displacement"] * 1e-9
+
+        optical_path_diff = opd_scan + opd_thermal + opd_vibration
+
+        # Phase from optical path difference plus laser phase noise
         phase_noise = np.random.normal(0, self.noise.phase_stability)
-        total_phase = phase + phase_noise
-        
-        # Interference intensity (normalized 0-1)
-        # I = I0 * (1 + V * cos(φ))
-        visibility = 0.95  # High-quality interference
-        intensity = 0.5 * (1 + visibility * np.cos(total_phase))
-        
+        total_phase = k * optical_path_diff + phase_noise
+
+        # Visibility degrades with unresolved vibration jitter:
+        # V = V0 exp(-(k sigma_vib)^2 / 2)
+        sigma_vib = 0.1 * self.noise.vibration_amplitude
+        visibility = 0.95 * float(np.exp(-0.5 * (k * sigma_vib) ** 2))
+        self._last_visibility = visibility
+
+        # Interference intensity, scaled by the laser power envelope
+        laser_level = env["laser"]["intensity"]
+        intensity = 0.5 * laser_level * (1 + visibility * np.cos(total_phase))
+
         # Add shot noise
         intensity += np.random.normal(0, self.noise.shot_noise_level)
-        intensity = np.clip(intensity, 0, 1)
-        
+        intensity = np.clip(intensity, 0, 1.5)
+
         return {
             "intensity": float(intensity),
             "phase": float(total_phase % (2 * np.pi)),
@@ -193,12 +231,16 @@ class OpticalBenchEmulator:
         if t is None:
             t = self.get_timestamp()
         
+        # Compute the shared environment once; interference couples to
+        # it and the per-channel telemetry reports the SAME values.
+        interference = self.generate_interference_signal(t)
+        env = self._environment(t)
         return {
             "timestamp": float(t),
-            "interference": self.generate_interference_signal(t),
-            "thermal": self.generate_thermal_drift(t),
-            "vibration": self.generate_vibration_signal(t),
-            "laser": self.generate_laser_intensity(t),
+            "interference": interference,
+            "thermal": env["thermal"],
+            "vibration": env["vibration"],
+            "laser": env["laser"],
             "fringes": self.generate_fringe_pattern(t),
             "parameters": {
                 "baseline_m": self.params.baseline_length,
@@ -230,6 +272,9 @@ class OpticalBenchEmulator:
         self.time_offset = 0.0
         self.fringe_count = 0
         self.thermal_drift_offset = 0.0
+        self._env_cache_t = None
+        self._env_cache = None
+        self._last_visibility = 0.95
         self.start_time = None
         self.params = BenchParameters()
         self.noise = NoiseProfile()
@@ -248,7 +293,7 @@ class OpticalBenchEmulator:
             "alignment_quality": float(alignment_quality),
             "thermal_stable": abs(self.params.temperature - 293.15) < 0.5,
             "laser_locked": self.noise.intensity_fluctuation < 0.05,
-            "fringe_contrast": 0.90,
+            "fringe_contrast": float(self._last_visibility),
             "data_quality": "good" if stability_score > 0.7 else "marginal"
         }
 

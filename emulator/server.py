@@ -146,7 +146,11 @@ class EmulatorServer:
         except Exception as e:
             logger.error(f"Error handling client message: {e}")
     
-    async def client_handler(self, websocket: WebSocketServerProtocol, path: str):
+    async def client_handler(self, websocket: WebSocketServerProtocol,
+                             path: str = "/"):
+        # websockets >= 11 invokes handlers with (websocket) only; the
+        # legacy two-argument form is kept via a default for older
+        # versions.
         """Handle individual client connections"""
         await self.register_client(websocket)
         

@@ -38,7 +38,12 @@ class SatelliteConfig:
     num_satellites: int = 2
     orbital_height: float = 500e3  # meters
     baseline_nominal: float = 200.0  # meters
-    baseline_variation: float = 10.0  # meters (1-sigma)
+    baseline_variation: float = 10.0  # meters (1-sigma, RAW orbital)
+    # Residual baseline error AFTER precise-orbit correction (m). The
+    # raw ~10 m orbital variation is removed with POD ephemerides in
+    # any real interferometric processor; only this residual reaches
+    # the differential phase (cm-level for POD-corrected baselines).
+    orbit_correction_residual: float = 0.01
     inclination: float = 97.4  # degrees (SSO)
     revisit_time: int = 12  # days
     
@@ -326,30 +331,44 @@ class ForwardModel:
 
         return g_field
         
-    def gravity_to_baseline(self, g_field: np.ndarray, 
+    def gravity_to_baseline(self, g_field: np.ndarray,
                           time_steps: int) -> np.ndarray:
-        """Convert gravity gradients to baseline dynamics"""
+        """Convert the gravity anomaly map to baseline dynamics (m).
+
+        Physical model: the two satellites, separated by the nominal
+        baseline b0 along-track, feel a DIFFERENTIAL acceleration
+        dg = (d g / d x) * b0. Under the linearized relative dynamics
+        the quasi-static baseline response to a constant differential
+        acceleration is dg / n^2 (forced HCW solution at DC), with n
+        the orbital mean motion. All quantities are SI (meters).
+        """
         nx, ny = g_field.shape
         baselines = np.zeros((time_steps, nx, ny))
-        
-        # Nominal baseline
+
+        # Nominal baseline (m) and mean motion (rad/s) of the orbit
         b0 = self.sat_config.baseline_nominal
-        
+        GM = 3.986004418e14
+        r_orbit = 6378137.0 + self.sat_config.orbital_height
+        n_orbit = np.sqrt(GM / r_orbit**3)
+
+        # Along-track gravity gradient (m/s^2 per m) -> differential
+        # acceleration over the baseline -> quasi-static displacement
+        spacing = self.sim_config.grid_spacing
+        grad_g = np.gradient(g_field, spacing)[0]
+        delta_b = (grad_g * b0) / n_orbit**2  # meters
+
         for t in range(time_steps):
-            # Orbital dynamics affect baseline
+            # Residual (post-POD-correction) orbital baseline error.
+            # The raw baseline_variation (~10 m) would produce hundreds
+            # of fringes per epoch at lambda=5.6 cm; interferometric
+            # processing removes it with precise orbits, leaving only
+            # orbit_correction_residual in the measured phase.
             orbital_phase = 2 * np.pi * t / 30  # Monthly variation
-            
-            # Baseline modulation by gravity gradient
-            grad_g = np.gradient(g_field)[0]  # Along-track gradient
-            
-            # Baseline changes (simplified model)
-            delta_b = (grad_g / 1e-9) * 0.001  # mm per nanoGal
-            
-            # Add orbital variations
-            orbital_var = self.sat_config.baseline_variation * np.sin(orbital_phase)
-            
+            orbital_var = (self.sat_config.orbit_correction_residual
+                           * np.sin(orbital_phase))
+
             baselines[t] = b0 + delta_b + orbital_var
-            
+
         return baselines
         
     def baseline_to_phase(self, baselines: np.ndarray) -> np.ndarray:
@@ -364,10 +383,10 @@ class ForwardModel:
         phases = np.zeros_like(baselines)
         
         for t in range(baselines.shape[0]):
-            # Differential phase
+            # Differential phase (baselines are in meters end-to-end)
             delta_b = baselines[t] - b_ref
-            phases[t] = sensitivity * delta_b * 1e-3  # Convert mm to m
-            
+            phases[t] = sensitivity * delta_b
+
         return phases
         
     def add_noise(self, phases: np.ndarray) -> np.ndarray:
@@ -457,19 +476,47 @@ class TelemetryGenerator:
             
             sampled_phases = phases[t][mask]
             sampled_x, sampled_y = np.where(mask)
-            
+
+            # Physically-derived attributes (not RNG):
+            # - Total phase-noise std from the simulation noise model
+            #   (same scaling as ForwardModel.add_noise): coherence is
+            #   gamma = exp(-sigma_phi^2 / 2) (standard InSAR relation)
+            # - SNR follows from coherence: gamma^2 / (1 - gamma^2)
+            # - Incidence angle varies linearly across the swath from
+            #   near range (20 deg) to far range (45 deg)
+            scale = self.config.noise_level / 0.1
+            iono_scale = 1 + 0.5 * np.sin(2 * np.pi * t / 24)
+            sigma_phi = np.sqrt(
+                (self.config.atmospheric_noise * scale) ** 2
+                + (self.config.thermal_noise * scale) ** 2
+                + (self.config.noise_level * iono_scale) ** 2
+            )
+            coherence = float(np.exp(-sigma_phi**2 / 2.0))
+            coherence = max(min(coherence, 0.9999), 1e-4)
+            snr_linear = coherence**2 / (1.0 - coherence**2)
+            snr_db = float(10.0 * np.log10(snr_linear))
+
             for i, (x, y, phase) in enumerate(zip(sampled_x, sampled_y, sampled_phases)):
+                incidence = 20.0 + 25.0 * (y / max(ny - 1, 1))
+                # Quality from coherence: good (0) above 0.7, degraded
+                # (1) above 0.4, bad (2) below
+                if coherence > 0.7:
+                    quality = 0
+                elif coherence > 0.4:
+                    quality = 1
+                else:
+                    quality = 2
                 record = {
                     'timestamp': timestamp,
                     'pixel_x': int(x),
                     'pixel_y': int(y),
                     'phase': float(phase),
-                    'coherence': float(self.rng.uniform(0.7, 1.0)),  # Interferometric coherence
-                    'snr': float(self.rng.uniform(10, 30)),  # Signal-to-noise ratio
+                    'coherence': coherence,
+                    'snr': snr_db,
                     'satellite_id': self.rng.choice(['SAT1', 'SAT2']),
                     'pass_direction': 'ascending' if t % 2 == 0 else 'descending',
-                    'incidence_angle': float(self.rng.uniform(20, 45)),
-                    'quality_flag': int(self.rng.choice([0, 0, 0, 1, 2]))  # Most are good
+                    'incidence_angle': float(incidence),
+                    'quality_flag': quality,
                 }
                 records.append(record)
                 

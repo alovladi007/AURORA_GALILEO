@@ -33,6 +33,14 @@ a LEO epoch state to <10 cm from 0.1 m noisy positions with credible
 formal covariance — the Gate 1 POD criterion on positions.
 gate0-smoke.yml runs the full compose stack + auth round-trip in CI.
 
+**Phase 1 W1.4:** sim/synthetic.py unit chain made physical (correct
+nanoGal-free HCW quasi-static baseline response, meters end-to-end,
+orbit-corrected residual baselines; telemetry coherence/SNR/incidence
+derived from the noise model instead of RNG). Emulator channels now
+physically coupled (vibration/thermal/laser reach the fringes;
+resolvable piezo scan; visibility-degradation model), verified by 5
+new coupling tests; websockets>=11 handler compatibility.
+
 **Gate 0 (2026-08-09, verified on a live Docker stack):** 14/14
 containers healthy from the canonical `docker-compose.yaml`; gateway
 /health reports all four gRPC services connected; register -> JWT
@@ -70,7 +78,7 @@ In progress / next (see master prompt for full list):
 ## Test Baseline (repo-root suite, 2026-07-17)
 
 ```
-392 collected: 331 passed, 0 failed, 61 skipped (0 collection errors)
+397 collected: 336 passed, 0 failed, 61 skipped (0 collection errors)
 ```
 
 All 17 previously-failing tests are fixed by real implementations (see
