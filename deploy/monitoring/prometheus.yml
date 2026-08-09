@@ -5,42 +5,14 @@ global:
     cluster: 'galileo-dev'
     environment: 'development'
 
-# Alerting configuration
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets: []
-
-# Load rules
-rule_files:
-  # - "alerts/*.yml"
-
-# Scrape configurations
 scrape_configs:
   # Prometheus itself
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
-        labels:
-          service: 'prometheus'
 
-  # PostgreSQL exporter (when available)
-  - job_name: 'postgresql'
+  # API gateway REST metrics (mounted /metrics endpoint)
+  - job_name: 'api-gateway'
     static_configs:
-      - targets: []
-        labels:
-          service: 'postgresql'
-
-  # Redis exporter (when available)
-  - job_name: 'redis'
-    static_configs:
-      - targets: []
-        labels:
-          service: 'redis'
-
-  # Application services (when deployed)
-  - job_name: 'galileo-services'
-    static_configs:
-      - targets: []
-        labels:
-          service: 'galileo'
+      - targets: ['api-gateway:8000']
+    metrics_path: /metrics

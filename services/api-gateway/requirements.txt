@@ -12,7 +12,8 @@ protobuf==4.25.0
 
 # Authentication
 python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+# passlib 1.7.4 is incompatible with bcrypt>=4.1; use bcrypt directly
+bcrypt>=4.1
 
 # Rate limiting
 slowapi==0.1.9

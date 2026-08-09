@@ -1,0 +1,346 @@
+# GALILEO V2.0 — canonical development stack (single source of truth).
+#
+# This is the ONLY docker-compose file for the platform (Phase 0 W0.2 of
+# MASTER_BUILD_PROMPT_18_MONTHS.md). The retired monolith and split
+# infra/microservices stacks are archived under deploy/legacy-compose/.
+#
+# Bring-up:   docker compose up -d
+# Gate 0:     docker compose ps  -> every service healthy
+#
+# Builds use the host network (build-time only): sandboxed/CI
+# environments frequently run package installs through a host-local
+# proxy that bridge-network build containers cannot reach.
+#
+# Default credentials are DEVELOPMENT-ONLY fallbacks so a clean clone
+# boots; override via .env for anything beyond local development.
+
+name: galileo
+
+services:
+  # ── Core microservices ────────────────────────────────────────────
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+      network: host
+    ports:
+      - "18000:8000"
+    environment:
+      - SERVICE_NAME=api-gateway
+      - DATA_SERVICE_ADDR=data-service:50051
+      - GRPC_DATA_SERVICE_HOST=data-service:50051
+      - GRPC_ML_SERVICE_HOST=ml-service:50052
+      - GRPC_INVERSION_SERVICE_HOST=inversion-service:50053
+      - GRPC_CONTROL_SERVICE_HOST=control-service:50054
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - JWT_SECRET=${JWT_SECRET:-dev-only-secret-do-not-deploy}
+      - AUTH_MODE=${AUTH_MODE:-optional}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_dev}
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+      data-service:
+        condition: service_started
+      ml-service:
+        condition: service_started
+      inversion-service:
+        condition: service_started
+      control-service:
+        condition: service_started
+    networks: [galileo]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  data-service:
+    build:
+      context: .
+      dockerfile: services/data-service/Dockerfile
+      network: host
+    expose: ["50051"]
+    environment:
+      - SERVICE_NAME=data-service
+      - GRPC_PORT=50051
+      - DATABASE_URL=postgresql://galileo:${DB_PASSWORD:-galileo_dev}@postgres:5432/galileo
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=galileo
+      - DB_USER=galileo
+      - DB_PASSWORD=${DB_PASSWORD:-galileo_dev}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - S3_ENDPOINT=minio:9000
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin_dev}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      kafka:
+        condition: service_started
+    networks: [galileo]
+
+  ml-service:
+    build:
+      context: .
+      dockerfile: services/ml-service/Dockerfile
+      network: host
+    expose: ["50052"]
+    environment:
+      - SERVICE_NAME=ml-service
+      - GRPC_PORT=50052
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=galileo
+      - DB_USER=galileo
+      - DB_PASSWORD=${DB_PASSWORD:-galileo_dev}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - S3_ENDPOINT=minio:9000
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin_dev}
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks: [galileo]
+    volumes:
+      - ml-models:/models
+
+  inversion-service:
+    build:
+      context: .
+      dockerfile: services/inversion-service/Dockerfile
+      network: host
+    expose: ["50053"]
+    environment:
+      - SERVICE_NAME=inversion-service
+      - GRPC_PORT=50053
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=galileo
+      - DB_USER=galileo
+      - DB_PASSWORD=${DB_PASSWORD:-galileo_dev}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - S3_ENDPOINT=minio:9000
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin_dev}
+      - LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks: [galileo]
+
+  control-service:
+    build:
+      context: .
+      dockerfile: services/control-service/Dockerfile
+      network: host
+    expose: ["50054"]
+    environment:
+      - SERVICE_NAME=control-service
+      - GRPC_PORT=50054
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=galileo
+      - DB_USER=galileo
+      - DB_PASSWORD=${DB_PASSWORD:-galileo_dev}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks: [galileo]
+
+  # ── Data stores ───────────────────────────────────────────────────
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      - POSTGRES_DB=galileo
+      - POSTGRES_USER=galileo
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-galileo_dev}
+    ports:
+      - "27432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./ops/db/init/00-create-databases.sh:/docker-entrypoint-initdb.d/00-create-databases.sh
+      - ./ops/db/timescale_setup.sql:/docker-entrypoint-initdb.d/10-timescale-setup.sql
+    networks: [galileo]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U galileo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_dev} --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "27379:6379"
+    volumes:
+      - redis-data:/data
+    networks: [galileo]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-redis_dev} ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "29000:9000"
+      - "29001:9001"
+    environment:
+      - MINIO_ROOT_USER=${S3_ACCESS_KEY:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${S3_SECRET_KEY:-minioadmin_dev}
+    volumes:
+      - minio-data:/data
+    networks: [galileo]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ── Messaging ─────────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+    networks: [galileo]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on: [zookeeper]
+    ports:
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Dual listeners: in-network clients use kafka:9092, host clients
+      # use localhost:29092. A single advertised listener can never
+      # serve both (the old configs broke one side or the other).
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks: [galileo]
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ── Observability ─────────────────────────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    ports:
+      - "29686:16686"  # UI
+      - "14317:4317"   # OTLP gRPC
+      - "14318:4318"   # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks: [galileo]
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "29090:9090"
+    volumes:
+      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks: [galileo]
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "29091:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-grafana_dev}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./deploy/monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./deploy/monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on: [prometheus]
+    networks: [galileo]
+
+  # ── MLOps ─────────────────────────────────────────────────────────
+  mlflow:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.11-slim
+        RUN pip install --no-cache-dir mlflow==2.8.0 psycopg2-binary boto3
+        EXPOSE 5000
+        CMD ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000"]
+      network: host
+    ports:
+      - "29500:5000"
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=postgresql://galileo:${DB_PASSWORD:-galileo_dev}@postgres:5432/mlflow
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=s3://mlflow-artifacts/
+      - AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY:-minioadmin}
+      - AWS_SECRET_ACCESS_KEY=${S3_SECRET_KEY:-minioadmin_dev}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks: [galileo]
+
+networks:
+  galileo:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  kafka-data:
+  zookeeper-data:
+  zookeeper-logs:
+  ml-models:
+  prometheus-data:
+  grafana-data:

@@ -156,6 +156,10 @@ app.include_router(websocket_router)
 # Include Workflow routes
 app.include_router(workflow_router)
 
+# Include Authentication routes (register / token / refresh / me)
+from api.auth_routes import router as auth_router  # noqa: E402
+app.include_router(auth_router)
+
 # Dependency: Extract user context from JWT token
 async def get_user_context(authorization: str = Header(None)) -> common_pb2.UserContext:
     """Extract and validate user context from JWT token"""

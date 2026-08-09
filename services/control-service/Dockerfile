@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy proto files from root
 COPY proto/ ./proto/
 
+# Copy the shared control physics package (controllers, navigation)
+COPY control/ ./control/
+
 # Copy application
 COPY services/control-service/src/ ./src/
 

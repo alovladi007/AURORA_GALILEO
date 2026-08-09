@@ -9,6 +9,10 @@ CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- earthdistance (and its dependency cube) provide ll_to_earth(), used
+-- by the GIST location index below; without them first boot aborts.
+CREATE EXTENSION IF NOT EXISTS cube;
+CREATE EXTENSION IF NOT EXISTS earthdistance;
 
 -- ============================================================================
 -- Satellite Telemetry Hypertable
@@ -281,24 +285,27 @@ GRANT SELECT ON slo_compliance_24h, active_satellites TO galileo;
 -- Maintenance Job - Statistics
 -- ============================================================================
 
--- Run ANALYZE on hypertables periodically
-SELECT add_job(
-    proc => $$ANALYZE satellite_telemetry$$,
-    schedule_interval => INTERVAL '6 hours',
-    if_not_exists => TRUE
-);
+-- Run ANALYZE on hypertables periodically. add_job requires a
+-- registered procedure (regproc), not an SQL string, and has no
+-- if_not_exists parameter.
+CREATE OR REPLACE PROCEDURE analyze_hypertables(job_id INT, config JSONB)
+LANGUAGE plpgsql AS $body$
+BEGIN
+    ANALYZE satellite_telemetry;
+    ANALYZE gravity_measurements;
+END
+$body$;
 
-SELECT add_job(
-    proc => $$ANALYZE gravity_measurements$$,
-    schedule_interval => INTERVAL '6 hours',
-    if_not_exists => TRUE
-);
+SELECT add_job('analyze_hypertables', INTERVAL '6 hours');
 
-SELECT add_job(
-    proc => $$ANALYZE api_metrics$$,
-    schedule_interval => INTERVAL '1 hour',
-    if_not_exists => TRUE
-);
+CREATE OR REPLACE PROCEDURE analyze_api_metrics(job_id INT, config JSONB)
+LANGUAGE plpgsql AS $body$
+BEGIN
+    ANALYZE api_metrics;
+END
+$body$;
+
+SELECT add_job('analyze_api_metrics', INTERVAL '1 hour');
 
 -- Done!
 SELECT 'TimescaleDB setup complete' AS status,

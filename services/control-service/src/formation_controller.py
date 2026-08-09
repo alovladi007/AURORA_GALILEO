@@ -40,10 +40,15 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Add repository root to sys.path to import control module
-repo_root = Path(__file__).parents[3]  # services/control-service/src -> GALILEO-V2.0
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
+# Add repository root to sys.path to import the control package.
+# Search upward for a directory containing control/__init__.py: works
+# both in the repo checkout (services/control-service/src -> repo root)
+# and in the Docker image (where control/ is copied next to src/).
+for _cand in Path(__file__).resolve().parents:
+    if (_cand / "control" / "__init__.py").exists():
+        if str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+        break
 
 # Import formation control modules
 try:
