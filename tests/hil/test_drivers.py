@@ -53,7 +53,7 @@ class TestMockTimingCard:
         card = MockTimingCard()
 
         assert card.config is not None
-        assert card.drift_accumulated == 0.0
+        assert card.sim_elapsed == 0.0
         assert len(card.trigger_queue) == 0
 
     def test_custom_config(self):
@@ -98,7 +98,7 @@ class TestMockTimingCard:
 
         # Triggers should be cleared
         assert len(card.trigger_queue) == 0
-        assert card.drift_accumulated == 0.0
+        assert card.sim_elapsed == 0.0
 
     def test_set_trigger(self):
         """Test setting hardware triggers."""
@@ -344,7 +344,7 @@ class TestScenarioRunner:
         """Test that running scenario resets hardware."""
         timing_card = MockTimingCard()
         timing_card.set_trigger(1.0)
-        timing_card.drift_accumulated = 10.0
+        timing_card.sim_elapsed = 10.0
 
         runner = ScenarioRunner(timing_card=timing_card)
 
@@ -355,7 +355,7 @@ class TestScenarioRunner:
         runner.run_scenario('dummy')
 
         # Should have reset
-        assert timing_card.drift_accumulated == 0.0
+        assert timing_card.sim_elapsed == 0.0
         assert len(timing_card.trigger_queue) == 0
 
     def test_run_all_scenarios(self):

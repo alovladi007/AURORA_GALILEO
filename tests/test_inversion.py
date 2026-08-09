@@ -113,10 +113,12 @@ class TestGaussNewtonSolver:
         # Initial guess
         m_init = np.array([0.5, 1.5, 2.5])
         
-        # Solve
+        # Solve. Regularization must be negligible for the residual to
+        # reach the data: with lambda=0.01 the regularized optimum is
+        # biased and a 1e-6 residual is mathematically unreachable.
         solver = GaussNewtonSolver(forward, jacobian)
-        result = solver.solve(d, m_init, lambda_reg=0.01, max_iter=50)
-        
+        result = solver.solve(d, m_init, lambda_reg=1e-6, max_iter=50)
+
         # Check convergence
         assert result['converged']
         assert result['residual'] < 1e-6
@@ -259,16 +261,20 @@ class TestRegularizers:
         n = 20
         reg = SparsityRegularizer(n, epsilon=1e-8)
         
-        # Sparse vs dense model
+        # Sparse vs dense model with the SAME L2 energy: for equal L2,
+        # the L1 norm is minimized by concentration (sparsity) and
+        # maximized by spreading, so L1(sparse) < L1(dense) is the
+        # property an L1 regularizer must exhibit.
         m_sparse = np.zeros(n)
         m_sparse[[5, 10, 15]] = [1.0, -0.5, 0.8]
-        
-        m_dense = np.random.randn(n) * 0.1
-        
+        l2 = np.linalg.norm(m_sparse)
+
+        m_dense = np.full(n, l2 / np.sqrt(n))  # same L2, fully spread
+
         penalty_sparse = reg.penalty(m_sparse)
         penalty_dense = reg.penalty(m_dense)
-        
-        # Sparse model should have smaller L1 norm
+
+        assert abs(np.linalg.norm(m_dense) - l2) < 1e-12
         assert penalty_sparse < penalty_dense
     
     def test_geologic_prior(self):

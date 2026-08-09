@@ -50,33 +50,44 @@ class MockTimingCard(TimingCardDriver):
     - Trigger generation
     """
 
+    #: Simulated tick per read_time() call. A deterministic simulated
+    #: timebase (not the wall clock) is essential: comparing two cards
+    #: via sequential Python calls must reflect only the modeled drift
+    #: and jitter, never the tens-of-microseconds call latency of the
+    #: host, which would swamp picosecond-level effects.
+    SAMPLE_INTERVAL = 0.01  # s of simulated time per read
+
     def __init__(self, config: Optional[TimingCardConfig] = None):
         self.config = config or TimingCardConfig()
         self.start_time = 0.0
-        self.drift_accumulated = 0.0
+        self.sim_elapsed = 0.0
         self.trigger_queue: List[float] = []
 
     def read_time(self) -> float:
         """
         Read current time with realistic clock behavior.
 
+        Each call advances the simulated timebase by SAMPLE_INTERVAL;
+        the returned card time is true elapsed time plus accumulated
+        drift (drift_rate * elapsed) plus white jitter, quantized to
+        the card resolution.
+
         Returns:
             Time in seconds
         """
-        import time as time_module
+        # Advance simulated true time
+        self.sim_elapsed += self.SAMPLE_INTERVAL
+        elapsed = self.sim_elapsed
 
-        # True elapsed time
-        elapsed = time_module.time() - self.start_time
-
-        # Add clock drift
+        # Clock drift is proportional to elapsed time (NOT re-accumulated
+        # on every read, which would grow quadratically)
         drift = self.config.drift_rate * elapsed
-        self.drift_accumulated += drift
 
         # Add jitter
         jitter = np.random.randn() * self.config.jitter
 
         # Total time
-        measured_time = elapsed + self.drift_accumulated + jitter
+        measured_time = elapsed + drift + jitter
 
         # Quantize to resolution
         measured_time = np.round(measured_time / self.config.resolution) * self.config.resolution
@@ -85,9 +96,8 @@ class MockTimingCard(TimingCardDriver):
 
     def reset(self):
         """Reset timing card to zero."""
-        import time as time_module
-        self.start_time = time_module.time()
-        self.drift_accumulated = 0.0
+        self.start_time = 0.0
+        self.sim_elapsed = 0.0
         self.trigger_queue = []
 
     def set_trigger(self, time: float):

@@ -171,9 +171,13 @@ class TestOpticalBenchEmulator:
         """Test heterodyne beat signal generation."""
         emulator = OpticalBenchEmulator(sampling_rate=1000.0, seed=42)
 
-        signal_freq = 100e6  # 100 MHz
-        lo_freq = 100.5e6    # 100.5 MHz
-        duration = 0.01      # 10 ms
+        # Beat note must be resolvable at the 1 kHz sampling rate: a
+        # 0.5 MHz beat aliases exactly to DC (500000/1000 is integer),
+        # so the old parameters produced a constant signal by correct
+        # physics. Use a 200 Hz beat (< Nyquist).
+        signal_freq = 100e6      # 100 MHz
+        lo_freq = 100.0002e6     # 100 MHz + 200 Hz
+        duration = 0.05          # 50 ms -> 10 beat cycles, 50 samples
 
         beat = emulator.heterodyne_beat(signal_freq, lo_freq, duration)
 

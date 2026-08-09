@@ -163,8 +163,13 @@ class TestSchemaValidation:
         assert pd.api.types.is_float_dtype(telemetry['phase'])
         assert pd.api.types.is_float_dtype(telemetry['coherence'])
         assert pd.api.types.is_float_dtype(telemetry['snr'])
-        assert pd.api.types.is_object_dtype(telemetry['satellite_id'])
-        assert pd.api.types.is_object_dtype(telemetry['pass_direction'])
+        # pandas >= 3 infers a dedicated 'str' dtype; pandas 2 uses object
+        def _is_stringlike(col):
+            return (pd.api.types.is_object_dtype(col)
+                    or pd.api.types.is_string_dtype(col))
+
+        assert _is_stringlike(telemetry['satellite_id'])
+        assert _is_stringlike(telemetry['pass_direction'])
         assert pd.api.types.is_float_dtype(telemetry['incidence_angle'])
         assert pd.api.types.is_integer_dtype(telemetry['quality_flag'])
         
@@ -358,9 +363,11 @@ class TestDataIntegrity:
         
     def test_gravity_field_symmetry(self):
         """Test gravity field has expected symmetries"""
-        config = SimulationConfig(grid_size=(40, 40, 20))
+        # Disable random layer noise so the test isolates the symmetry
+        # of the forward kernel's response to a symmetric source.
+        config = SimulationConfig(grid_size=(40, 40, 20), layer_variation=0.0)
         model = SubsurfaceModel(config, seed=42)
-        
+
         # Add centered spherical void
         center = np.array([20, 20, 10]) * config.grid_spacing
         model.add_void(center=center, size=np.array([20, 20, 20]))

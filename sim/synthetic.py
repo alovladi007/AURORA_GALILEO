@@ -54,6 +54,7 @@ class SimulationConfig:
     noise_level: float = 0.1  # radians
     atmospheric_noise: float = 0.05  # radians
     thermal_noise: float = 0.03  # radians
+    layer_variation: float = 20.0  # kg/m³ (random sedimentary-layer noise)
     
 
 class SubsurfaceModel:
@@ -76,7 +77,11 @@ class SubsurfaceModel:
         for z in range(nz):
             depth = z * self.config.grid_spacing
             base_density = 2000 + depth * 0.5  # Increasing with depth
-            layer_variation = self.rng.normal(0, 20, (nx, ny))
+            if self.config.layer_variation > 0:
+                layer_variation = self.rng.normal(
+                    0, self.config.layer_variation, (nx, ny))
+            else:
+                layer_variation = 0.0
             self.density_field[:, :, z] = base_density + layer_variation
             
     def add_void(self, center: Optional[np.ndarray] = None, 
@@ -276,36 +281,49 @@ class ForwardModel:
         self.rng = np.random.RandomState(sim_config.seed)
         
     def density_to_gravity(self) -> np.ndarray:
-        """Convert density anomalies to gravity field changes"""
+        """Surface gravity anomaly (vertical component, m/s^2) from the
+        3-D density model via Newtonian point-mass summation.
+
+        For each depth layer, the density contrast (relative to the
+        layer mean, i.e. the stratified background) is convolved with
+        the Newtonian kernel
+
+            K(dx, dy; z) = G dV z / (dx^2 + dy^2 + z^2)^{3/2}
+
+        where z is the vertical distance from the source cell to the
+        observation plane (one grid spacing above the surface — a
+        ground/near-surface anomaly map; upward continuation to
+        satellite altitude is an L1-processing step, not done here).
+        The layer convolutions are evaluated with FFTs, which is exact
+        for the periodic extension and O(nz * nx ny log(nx ny)).
+        """
+        from scipy.signal import fftconvolve
+
         density = self.subsurface.density_field
         nx, ny, nz = density.shape
         spacing = self.sim_config.grid_spacing
-        
-        # Compute gravity at satellite altitude
-        h = self.sat_config.orbital_height
-        
-        # Simple forward gravity calculation (vertical component)
+
+        # Observation plane just above the surface
+        h_obs = spacing
+        dV = spacing**3
+
+        # Kernel support: offsets out to the full grid (linear
+        # convolution via fftconvolve 'same' with a (2nx-1, 2ny-1) kernel)
+        x_off = (np.arange(-(nx - 1), nx)) * spacing
+        y_off = (np.arange(-(ny - 1), ny)) * spacing
+        DX, DY = np.meshgrid(x_off, y_off, indexing="ij")
+
         g_field = np.zeros((nx, ny))
-        
-        for i in range(nx):
-            for j in range(ny):
-                for k in range(nz):
-                    if k == 0:
-                        continue  # Skip surface
-                    
-                    # Density contrast from background
-                    rho = density[i, j, k] - density[i, j, 0]
-                    if abs(rho) < 1e-6:
-                        continue
-                        
-                    # Distance to observation point
-                    z_depth = k * spacing
-                    r = np.sqrt(h**2 + z_depth**2)
-                    
-                    # Gravitational contribution (simplified)
-                    dV = spacing**3  # Volume element
-                    g_field[i, j] += G * rho * dV * z_depth / r**3
-                    
+        for k in range(nz):
+            layer = density[:, :, k]
+            rho_contrast = layer - layer.mean()  # anomaly vs stratified bg
+            if np.max(np.abs(rho_contrast)) < 1e-9:
+                continue
+            z = h_obs + k * spacing  # vertical lever arm to source layer
+            r3 = (DX**2 + DY**2 + z**2) ** 1.5
+            kernel = G * dV * z / r3
+            g_field += fftconvolve(rho_contrast, kernel, mode="same")
+
         return g_field
         
     def gravity_to_baseline(self, g_field: np.ndarray, 
@@ -356,19 +374,25 @@ class ForwardModel:
         """Add realistic noise to phase measurements"""
         noisy_phases = phases.copy()
         time_steps, nx, ny = phases.shape
-        
+
+        # noise_level acts as the master noise scale: atmospheric and
+        # thermal amplitudes are defined at the reference level 0.1 rad
+        # and scale proportionally, so noise_level -> 0 silences all
+        # noise sources.
+        scale = self.sim_config.noise_level / 0.1
+
         for t in range(time_steps):
             # Atmospheric noise (correlated)
             atm_noise = self._generate_correlated_noise(
-                (nx, ny), 
-                self.sim_config.atmospheric_noise,
+                (nx, ny),
+                self.sim_config.atmospheric_noise * scale,
                 correlation_length=20
             )
-            
+
             # Thermal noise (uncorrelated)
             thermal_noise = self.rng.normal(
-                0, 
-                self.sim_config.thermal_noise,
+                0,
+                self.sim_config.thermal_noise * scale,
                 (nx, ny)
             )
             
@@ -574,19 +598,22 @@ class SyntheticDataGenerator:
         print("  Creating subsurface anomalies...")
         subsurface = SubsurfaceModel(self.sim_config, seed=self.sim_config.seed)
         
-        # Add various anomalies
+        # Add various anomalies. Counts come from the seeded generator
+        # (never the global np.random state) so a fixed seed reproduces
+        # the exact same dataset.
+        count_rng = np.random.RandomState(self.sim_config.seed)
         anomalies = []
-        
+
         # Add voids
-        for _ in range(np.random.randint(1, 4)):
+        for _ in range(count_rng.randint(1, 4)):
             anomalies.append(subsurface.add_void())
-            
+
         # Add tunnels
-        for _ in range(np.random.randint(0, 3)):
+        for _ in range(count_rng.randint(0, 3)):
             anomalies.append(subsurface.add_tunnel())
-            
+
         # Add ore bodies
-        for _ in range(np.random.randint(1, 5)):
+        for _ in range(count_rng.randint(1, 5)):
             anomalies.append(subsurface.add_ore_body())
             
         print(f"  Added {len(anomalies)} anomalies")

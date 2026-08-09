@@ -16,7 +16,7 @@ class LaserParameters:
     """Laser parameters for emulation."""
     wavelength: float = 1064e-9  # m (Nd:YAG)
     power: float = 1.0  # W
-    frequency_noise: float = 1e3  # Hz/√Hz
+    frequency_noise: float = 1.0  # Hz/√Hz (cavity-stabilized metrology laser)
     intensity_noise: float = 1e-7  # RIN (relative intensity noise)
     beam_divergence: float = 10e-6  # rad
 
@@ -180,9 +180,16 @@ class OpticalBenchEmulator:
         # Ideal beat signal
         beat = np.cos(2 * np.pi * f_beat * t)
 
-        # Add phase noise
-        phase_noise_psd = self.laser.frequency_noise
-        phase_noise = np.cumsum(np.random.randn(n_samples)) * phase_noise_psd / np.sqrt(self.sampling_rate)
+        # Add laser phase noise (white frequency noise -> phase random
+        # walk). frequency_noise is the frequency-noise ASD f_ASD in
+        # Hz/sqrt(Hz): per-sample frequency deviations have std
+        # f_ASD*sqrt(fs/2); phase accumulates as 2*pi*cumsum(df)*dt.
+        # The resulting Lorentzian linewidth is pi*f_ASD^2 (~3 Hz for
+        # the 1 Hz/sqrt(Hz) stabilized-laser default).
+        df = (np.random.randn(n_samples)
+              * self.laser.frequency_noise
+              * np.sqrt(self.sampling_rate / 2.0))
+        phase_noise = 2.0 * np.pi * np.cumsum(df) / self.sampling_rate
 
         beat_noisy = np.cos(2 * np.pi * f_beat * t + phase_noise)
 

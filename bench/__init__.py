@@ -9,6 +9,7 @@ Usage:
     runner.run_suite('all')
 """
 
+from .result import BenchmarkResult
 from .metrics import (
     SpatialResolutionMetrics,
     LocalizationMetrics,
@@ -25,6 +26,7 @@ __version__ = '1.0.0'
 __all__ = [
     'SpatialResolutionMetrics',
     'LocalizationMetrics',
+    'BenchmarkResult',
     'PerformanceMetrics',
     'CoverageAnalyzer',
     'RegressionDatasets',

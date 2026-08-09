@@ -186,23 +186,29 @@ class TestTotalVariation:
     """Test Total Variation regularization."""
 
     def test_smooth_model_low_tv(self):
-        """Test that smooth models have low TV."""
-        # Smooth model (quadratic)
-        x = np.linspace(-1, 1, 30)
-        y = np.linspace(-1, 1, 30)
-        X, Y = np.meshgrid(x, y)
-        smooth_model = X**2 + Y**2
+        """TV discriminates oscillation, not edges: for the same value
+        range, a monotone model (ramp or step) has TV ~= range * width,
+        while an oscillatory/noisy model has far higher TV. (A smooth
+        quadratic spanning a larger range than a unit step legitimately
+        has MORE total variation — the old comparison was ill-posed.)"""
+        n = 30
+        # Monotone ramp spanning [0, 1]
+        ramp = np.tile(np.linspace(0.0, 1.0, n), (n, 1))
+        tv_ramp, _ = total_variation(ramp)
 
-        tv_smooth, grad_smooth = total_variation(smooth_model)
+        # Step with the same range
+        step = np.zeros((n, n))
+        step[:, n // 2:] = 1.0
+        tv_step, _ = total_variation(step)
 
-        # Sharp edge model
-        sharp_model = np.zeros((30, 30))
-        sharp_model[:15, :] = 1.0
+        # Noisy model with the same range
+        rng = np.random.RandomState(0)
+        noisy = rng.uniform(0.0, 1.0, (n, n))
+        tv_noisy, _ = total_variation(noisy)
 
-        tv_sharp, grad_sharp = total_variation(sharp_model)
-
-        # Sharp edges should have higher TV
-        assert tv_sharp > tv_smooth, "Sharp edges should have higher TV"
+        # Monotone variants are comparable; oscillation dominates both
+        assert tv_noisy > 3 * tv_ramp
+        assert tv_noisy > 3 * tv_step
 
     def test_constant_model_zero_tv(self):
         """Test that constant models have zero TV."""

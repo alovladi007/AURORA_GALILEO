@@ -219,11 +219,12 @@ def total_variation(
         grad_x = np.gradient(model, grid_spacing, axis=1)
         grad_y = np.gradient(model, grid_spacing, axis=0)
 
-        # Magnitude of gradient
+        # Magnitude of gradient (epsilon-smoothed)
         grad_mag = np.sqrt(grad_x**2 + grad_y**2 + epsilon**2)
 
-        # TV value
-        tv_value = np.sum(grad_mag) * grid_spacing**2
+        # TV value; subtract the smoothing floor so a constant model
+        # has exactly zero TV instead of N*epsilon
+        tv_value = np.sum(grad_mag - epsilon) * grid_spacing**2
 
         # Gradient of TV
         # ∂R/∂m = -∇ · (∇m / |∇m|)
@@ -246,7 +247,8 @@ def total_variation(
 
         grad_mag = np.sqrt(grad_x**2 + grad_y**2 + grad_z**2 + epsilon**2)
 
-        tv_value = np.sum(grad_mag) * grid_spacing**3
+        # Subtract the smoothing floor (zero TV for constant models)
+        tv_value = np.sum(grad_mag - epsilon) * grid_spacing**3
 
         # Gradient (simplified)
         norm_grad_x = grad_x / (grad_mag + epsilon)

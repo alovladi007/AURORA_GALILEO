@@ -18,7 +18,7 @@ The remediation and build program (Phases 0–6 over 18 months, with
 per-phase verification gates):
 [`MASTER_BUILD_PROMPT_18_MONTHS.md`](MASTER_BUILD_PROMPT_18_MONTHS.md).
 
-## Current Phase: Phase 0 — Truth & Stabilization (in progress)
+## Current Phase: Phase 1 — Scientific Core (W1.1 complete); Phase 0 W0.2 pending
 
 Completed (W0.4 — package-level breakage):
 - [x] `time/` renamed to `gtime/` (was shadowing the stdlib and
@@ -48,14 +48,17 @@ In progress / next (see master prompt for full list):
 ## Test Baseline (repo-root suite, 2026-07-17)
 
 ```
-320 collected: 246 passed, 17 failed, 58 skipped (0 collection errors;
-previously 6 test modules could not even be collected)
+344 collected: 282 passed, 0 failed, 62 skipped (0 collection errors)
 ```
 
-The 17 failures are genuine, known defects — primarily the placeholder
-spherical-harmonic gravity model and physics errors catalogued in the
-audit — scheduled for Phase 1. They are intentionally left failing
-rather than skipped: they are the Phase 1 acceptance criteria.
+All 17 previously-failing tests are fixed by real implementations (see
+Phase 1 commits): corrected J2/element/drag/SRP physics with 19 new
+reference-validation tests, a real spherical-harmonic gravity model
+cross-validated against the independent closed-form J2, a Newtonian
+FFT forward model in sim/synthetic.py, corrected TV smoothing floor,
+corrected heterodyne phase-noise scaling and a deterministic timing
+card mock, STAC timezone handling, and the previously-phantom
+BenchmarkResult class.
 
 Per-service suites under `services/*/tests/` run separately in CI
 (`services-tests.yml`) and remain the most reliable part of the stack.

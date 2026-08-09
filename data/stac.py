@@ -8,7 +8,7 @@ Manage geospatial data using STAC specification.
 import json
 from dataclasses import dataclass, asdict
 from typing import List, Dict, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 
 
@@ -216,6 +216,14 @@ class STACCatalog:
                 if item_datetime:
                     item_dt = datetime.fromisoformat(item_datetime.replace('Z', '+00:00'))
                     start, end = datetime_range
+                    # Normalize to timezone-aware UTC so naive query
+                    # bounds compare against stored aware datetimes
+                    if item_dt.tzinfo is None:
+                        item_dt = item_dt.replace(tzinfo=timezone.utc)
+                    if start.tzinfo is None:
+                        start = start.replace(tzinfo=timezone.utc)
+                    if end.tzinfo is None:
+                        end = end.replace(tzinfo=timezone.utc)
                     if not (start <= item_dt <= end):
                         continue
 
