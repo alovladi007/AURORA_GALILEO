@@ -145,8 +145,13 @@ class CCSDSPacket:
             secondary = CCSDSSecondaryHeader.unpack(data[offset:])
             offset += 8  # Assuming 8-byte secondary header
 
-        # Extract user data
-        user_data = data[offset:offset + primary.packet_data_length + 1]
+        # Extract user data. packet_data_length is (data-field length
+        # - 1) per CCSDS 133.0-B, where the data field INCLUDES the
+        # secondary header; subtract the 8 bytes already consumed or
+        # the slice reads into the next packet of a stream.
+        data_field_len = primary.packet_data_length + 1
+        user_len = data_field_len - (8 if primary.secondary_header_flag else 0)
+        user_data = data[offset:offset + user_len]
 
         return cls(
             primary_header=primary,

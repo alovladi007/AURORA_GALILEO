@@ -133,23 +133,17 @@ def relativistic_range_correction(
     # Shapiro delay (first-order)
     shapiro = shapiro_delay(r_tx_mag, r_rx_mag, rho)
 
-    # Time dilation corrections (if velocities provided)
-    if v_tx is not None and v_rx is not None:
-        v_tx_mag = np.linalg.norm(v_tx, axis=-1)
-        v_rx_mag = np.linalg.norm(v_rx, axis=-1)
-
-        # Time correction at transmitter and receiver
-        dt_tx = relativistic_time_correction(r_tx_mag, v_tx_mag)
-        dt_rx = relativistic_time_correction(r_rx_mag, v_rx_mag)
-
-        # Convert time correction to range correction
-        # Δρ ≈ c * (Δt_rx - Δt_tx) * τ where τ is light time
-        tau = rho / C
-        time_corr = C * (dt_rx - dt_tx) * tau
+    # Periodic relativistic correction (transmitter orbit-eccentricity
+    # effect), the standard GNSS form: delta_rho = -2 (r_tx . v_tx) / c
+    # in meters (IS-GPS-200, sec. 20.3.3.3.3.1). The previous formula
+    # (c * rate-difference * light-time) was dimensionally engineered
+    # but physically unfounded.
+    if v_tx is not None:
+        ecc_corr = -2.0 * np.sum(r_tx * v_tx, axis=-1) / C
     else:
-        time_corr = 0.0
+        ecc_corr = 0.0
 
-    return shapiro + time_corr
+    return shapiro + ecc_corr
 
 
 def shapiro_delay(
@@ -279,17 +273,20 @@ def redshift_doppler(
     Returns:
         Frequency ratio f_rx/f_tx (dimensionless), same shape as r1
     """
-    # Gravitational redshift
-    grav_redshift = np.sqrt((1.0 - 2.0 * GM_EARTH / (r2 * C**2)) /
-                            (1.0 - 2.0 * GM_EARTH / (r1 * C**2)))
+    # Gravitational redshift: f_rx/f_tx = sqrt(g_tt(emitter)/g_tt(rx)).
+    # A photon climbing OUT of the well (r2 > r1) must be REDshifted
+    # (ratio < 1): emitter term in the numerator.
+    grav_redshift = np.sqrt((1.0 - 2.0 * GM_EARTH / (r1 * C**2)) /
+                            (1.0 - 2.0 * GM_EARTH / (r2 * C**2)))
 
-    # First-order Doppler shift
-    # v_rel = (v2 - v1) · r̂12
+    # First-order Doppler shift: a receiver RECEDING along the
+    # emitter->receiver line ((v2-v1).r12_hat > 0) sees a LOWER
+    # frequency: 1 - v_rel/c.
     r12_mag = np.linalg.norm(r12, axis=-1, keepdims=True)
     r12_unit = r12 / (r12_mag + 1e-10)
 
     v_rel = np.sum((v2 - v1) * r12_unit, axis=-1)
-    doppler = 1.0 + v_rel / C
+    doppler = 1.0 - v_rel / C
 
     return grav_redshift * doppler
 

@@ -1,0 +1,88 @@
+name: Gate 0 Smoke (compose up -> healthy -> auth round-trip)
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "0 4 * * *" # nightly
+  workflow_dispatch:
+
+concurrency:
+  group: gate0-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate0:
+    name: Clean clone -> full stack healthy
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Bring up the stack
+        run: docker compose up -d
+
+      - name: Wait for gateway health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:18000/health > /dev/null; then
+              echo "gateway healthy after ~$((i*5))s"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::gateway never became healthy"
+          docker compose ps -a
+          docker compose logs --tail 50 api-gateway
+          exit 1
+
+      - name: Verify all gRPC services connected
+        run: |
+          health=$(curl -sf http://localhost:18000/health)
+          echo "$health" | python3 -c '
+          import sys, json
+          d = json.load(sys.stdin)
+          bad = {k: v for k, v in d["services"].items() if v not in ("healthy", "connected")}
+          assert d["status"] == "healthy", d
+          assert not bad, f"unhealthy services: {bad}"
+          print("all services connected")
+          '
+
+      - name: Auth round-trip (register -> login -> me -> 401)
+        run: |
+          set -e
+          curl -sf -X POST http://localhost:18000/auth/register \
+            -H "Content-Type: application/json" \
+            -d '{"email":"ci@galileo.dev","password":"gate0-ci-password"}' | grep -q admin
+          TOKEN=$(curl -sf -X POST http://localhost:18000/auth/token \
+            -H "Content-Type: application/json" \
+            -d '{"email":"ci@galileo.dev","password":"gate0-ci-password"}' \
+            | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+          curl -sf http://localhost:18000/auth/me \
+            -H "Authorization: Bearer $TOKEN" | grep -q ci@galileo.dev
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            http://localhost:18000/auth/token \
+            -H "Content-Type: application/json" \
+            -d '{"email":"ci@galileo.dev","password":"wrong"}')
+          test "$code" = "401"
+          echo "auth round-trip OK"
+
+      - name: Database sanity (hypertables + mlflow DB)
+        run: |
+          docker compose exec -T postgres psql -U galileo -d galileo -tc \
+            "SELECT count(*) FROM timescaledb_information.hypertables" | grep -qE "[1-9]"
+          docker compose exec -T postgres psql -U galileo -tc \
+            "SELECT datname FROM pg_database WHERE datname='mlflow'" | grep -q mlflow
+          echo "database sanity OK"
+
+      - name: Dump state on failure
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --tail 100

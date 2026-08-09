@@ -156,9 +156,11 @@ class BatchLeastSquares:
                 converged = True
                 break
 
-        # Covariance from normal matrix
+        # Covariance from normal matrix. N = H^T W H with W = I/sigma^2
+        # already carries the measurement variance, so inv(N) IS the
+        # covariance; multiplying by sigma^2 again double-counted it.
         try:
-            P = np.linalg.inv(N) * measurement_noise**2
+            P = np.linalg.inv(N)
         except np.linalg.LinAlgError:
             warnings.warn("Cannot invert normal matrix, using large covariance")
             P = np.eye(n_state) * 1e6
@@ -459,8 +461,20 @@ def compute_dilution_of_precision(
     GDOP = np.sqrt(np.trace(G))
     PDOP = np.sqrt(np.trace(G[:3, :3]))
 
-    # HDOP and VDOP require ENU frame (approximate)
-    HDOP = np.sqrt(G[0, 0] + G[1, 1])
-    VDOP = np.sqrt(G[2, 2])
+    # HDOP/VDOP are defined in the local ENU frame: rotate the ECEF
+    # position covariance block before splitting horizontal/vertical
+    # (the raw ECEF components are only correct at the poles).
+    lat = np.arcsin(receiver_pos[2] / np.linalg.norm(receiver_pos))
+    lon = np.arctan2(receiver_pos[1], receiver_pos[0])
+    sl, cl = np.sin(lat), np.cos(lat)
+    so, co = np.sin(lon), np.cos(lon)
+    R_enu = np.array([
+        [-so, co, 0.0],
+        [-sl * co, -sl * so, cl],
+        [cl * co, cl * so, sl],
+    ])
+    G_enu = R_enu @ G[:3, :3] @ R_enu.T
+    HDOP = np.sqrt(G_enu[0, 0] + G_enu[1, 1])
+    VDOP = np.sqrt(G_enu[2, 2])
 
     return GDOP, PDOP, HDOP, VDOP

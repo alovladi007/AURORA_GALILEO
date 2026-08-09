@@ -53,16 +53,19 @@ class ClockModel(ABC):
 
 class WhiteNoiseClock(ClockModel):
     """
-    White phase noise (quantization, thermal noise).
+    White FREQUENCY noise clock (e.g. passive atomic standards).
 
-    PSD: S_φ(f) = h0 (flat)
-    Allan deviation: σ(τ) = sqrt(h0 / (2τ))
+    The generated time-error is a random walk in phase: x = integral of
+    white fractional-frequency noise y with one-sided PSD S_y(f) = h0.
+
+    PSD: S_y(f) = h0 (flat, 1/Hz)
+    Allan deviation: sigma_y(tau) = sqrt(h0 / (2 tau))
     """
 
     def __init__(self, h0: float):
         """
         Args:
-            h0: White phase noise level (s^2/Hz)
+            h0: White frequency noise level, one-sided PSD (1/Hz)
         """
         self.h0 = h0
 
@@ -72,33 +75,39 @@ class WhiteNoiseClock(ClockModel):
 
         dt = np.diff(t)
         dt_mean = np.mean(dt)
+        fs = 1.0 / dt_mean
 
-        # White phase noise: φ[n] = φ[n-1] + sqrt(h0 / dt) * randn
-        noise = np.sqrt(self.h0 / dt_mean) * np.random.randn(len(t))
-        phase = np.cumsum(noise) * dt_mean
+        # Per-sample fractional-frequency deviations for one-sided PSD
+        # h0: var(y) = h0 * fs / 2. Time error x = cumsum(y) * dt.
+        y = np.sqrt(self.h0 * fs / 2.0) * np.random.randn(len(t))
+        phase = np.cumsum(y) * dt_mean
 
         return phase
 
     def power_spectral_density(self, f: np.ndarray) -> np.ndarray:
+        """One-sided fractional-frequency PSD S_y(f)."""
         return self.h0 * np.ones_like(f)
 
     def allan_deviation(self, tau: np.ndarray) -> np.ndarray:
-        """Theoretical Allan deviation."""
+        """Theoretical Allan deviation (white FM)."""
         return np.sqrt(self.h0 / (2.0 * tau))
 
 
 class FlickerNoiseClock(ClockModel):
     """
-    Flicker phase noise (1/f noise).
+    Flicker FREQUENCY noise clock (the "flicker floor" of oscillators).
 
-    PSD: S_φ(f) = h_{-1} / f
-    Allan deviation: σ(τ) ≈ sqrt(2 ln(2) h_{-1}) (constant)
+    The fractional frequency y has a 1/f PSD; the generated time error
+    is its integral.
+
+    PSD: S_y(f) = h_{-1} / f
+    Allan deviation: sigma_y(tau) ~ sqrt(2 ln(2) h_{-1}) (constant)
     """
 
     def __init__(self, h_minus1: float, f_low: float = 1e-4, f_high: float = 1e2):
         """
         Args:
-            h_minus1: Flicker phase noise level (s^2)
+            h_minus1: Flicker frequency noise level (dimensionless)
             f_low: Low-frequency cutoff (Hz)
             f_high: High-frequency cutoff (Hz)
         """
@@ -107,7 +116,8 @@ class FlickerNoiseClock(ClockModel):
         self.f_high = f_high
 
     def generate_phase(self, t: np.ndarray, seed: Optional[int] = None) -> np.ndarray:
-        """Generate flicker noise using spectral synthesis."""
+        """Generate the time error of a flicker-FM clock: synthesize a
+        1/f fractional-frequency series spectrally, then integrate."""
         if seed is not None:
             np.random.seed(seed)
 
@@ -119,22 +129,25 @@ class FlickerNoiseClock(ClockModel):
         freqs = np.fft.rfftfreq(n, dt)
         freqs[0] = self.f_low  # Avoid division by zero
 
-        # PSD: 1/f
+        # Fractional-frequency PSD: S_y = h-1 / f
         psd = self.h_minus1 / np.abs(freqs)
         psd[freqs < self.f_low] = 0
         psd[freqs > self.f_high] = 0
 
-        # Generate complex Gaussian with PSD
+        # Generate complex Gaussian with that PSD
         amplitude = np.sqrt(psd * fs / 2)
-        phase_fft = amplitude * (np.random.randn(len(freqs)) + 1j * np.random.randn(len(freqs)))
-        phase_fft[0] = 0  # Zero DC
+        y_fft = amplitude * (np.random.randn(len(freqs)) + 1j * np.random.randn(len(freqs)))
+        y_fft[0] = 0  # Zero DC
 
-        # IFFT to get time-domain signal
-        phase = np.fft.irfft(phase_fft, n)
+        y = np.fft.irfft(y_fft, n)
+
+        # Time error is the integral of fractional frequency
+        phase = np.cumsum(y) * dt
 
         return phase
 
     def power_spectral_density(self, f: np.ndarray) -> np.ndarray:
+        """One-sided fractional-frequency PSD S_y(f)."""
         psd = self.h_minus1 / np.abs(f)
         psd[f < self.f_low] = 0
         psd[f > self.f_high] = 0
@@ -262,9 +275,15 @@ def allan_deviation(
         # Compute fractional frequencies
         # y_k = (φ[k+m] - φ[k]) / (m * dt)
         if overlapping:
-            # Overlapping: all possible intervals
+            # Overlapping: average frequencies over every possible
+            # interval, then difference frequencies m samples apart
+            # (adjacent-sample differences bias the estimate and
+            # produce a spurious tau^-1 slope for every noise type).
             y = (phase[m:] - phase[:-m]) / (m * dt)
-            diff_y = y[1:] - y[:-1]
+            if len(y) <= m:
+                sigma[i] = np.nan
+                continue
+            diff_y = y[m:] - y[:-m]
         else:
             # Non-overlapping: disjoint intervals
             num_intervals = n // m - 1

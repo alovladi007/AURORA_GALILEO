@@ -177,17 +177,18 @@ class AllanDeviation:
         slope = coeffs[0]
         
         # Identify noise type based on slope
-        # White noise: slope ~ -0.5
-        # Flicker noise: slope ~ 0
-        # Random walk: slope ~ +0.5
-        # Rate random walk: slope ~ +1.0
-        
+        # Standard Allan-deviation log-log slopes (IEEE 1139):
+        #   -1.0: white/flicker PHASE modulation (tau^-1)
+        #   -0.5: white FREQUENCY modulation (tau^-1/2)
+        #    0.0: flicker frequency modulation (flicker floor)
+        #   +0.5: random-walk frequency modulation
+        #   +1.0: frequency drift
         noise_types = {
-            -1.0: "white frequency modulation",
-            -0.5: "white phase modulation (white noise)",
-            0.0: "flicker phase modulation (flicker noise)",
-            0.5: "random walk frequency modulation (random walk)",
-            1.0: "rate random walk"
+            -1.0: "white/flicker phase modulation",
+            -0.5: "white frequency modulation",
+            0.0: "flicker frequency modulation (flicker floor)",
+            0.5: "random walk frequency modulation",
+            1.0: "frequency drift",
         }
         
         # Find closest match

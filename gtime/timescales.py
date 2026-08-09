@@ -97,7 +97,10 @@ class TimeScale:
     def to_utc(self) -> 'TimeScale':
         """Convert to UTC."""
         tai = self.to_tai()
+        # Leap table is UTC-keyed: refine via a candidate UTC epoch
         offset = get_leap_second_offset(tai.mjd)
+        utc_guess_mjd = tai.mjd + (tai.seconds + offset) / 86400.0
+        offset = get_leap_second_offset(utc_guess_mjd)
         return TimeScale(tai.mjd, tai.seconds + offset, 'UTC')
 
     def total_seconds(self) -> float:
@@ -210,7 +213,13 @@ def tai_to_utc(tai_mjd: float, tai_seconds: float = 0.0) -> tuple[float, float]:
     Returns:
         (utc_mjd, utc_seconds)
     """
+    # The leap-second table is keyed by UTC dates. A TAI epoch within
+    # ~40 s of a boundary would pick the wrong entry if looked up with
+    # the TAI MJD directly, so refine once via a candidate UTC epoch
+    # (offsets change by exactly 1 s, so one refinement converges).
     offset = get_leap_second_offset(tai_mjd)
+    utc_guess_mjd = tai_mjd + (tai_seconds + offset) / 86400.0
+    offset = get_leap_second_offset(utc_guess_mjd)
     utc_seconds = tai_seconds + offset  # offset is negative
 
     # Handle day rollover
