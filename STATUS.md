@@ -18,7 +18,15 @@ The remediation and build program (Phases 0–6 over 18 months, with
 per-phase verification gates):
 [`MASTER_BUILD_PROMPT_18_MONTHS.md`](MASTER_BUILD_PROMPT_18_MONTHS.md).
 
-## Current Phase: Phase 1 — Scientific Core (W1.1 complete); Phase 0 W0.2 pending
+## Current Phase: Gate 0 PASSED; Phase 1 W1.1 complete; Phase 2 W2.3 auth live
+
+**Gate 0 (2026-08-09, verified on a live Docker stack):** 14/14
+containers healthy from the canonical `docker-compose.yaml`; gateway
+/health reports all four gRPC services connected; register -> JWT
+login -> /auth/me -> refresh verified end-to-end against the live
+stack (Redis-backed users, bcrypt, 401 on bad credentials); workflow
+engine serving registered workflows; UI `next build` green with zero
+type errors and no fabricated-telemetry fallbacks.
 
 Completed (W0.4 — package-level breakage):
 - [x] `time/` renamed to `gtime/` (was shadowing the stdlib and
@@ -41,14 +49,15 @@ Completed (W0.1 — repo hygiene):
 - [x] ~60 contradictory status/session docs archived to `docs/history/`
 
 In progress / next (see master prompt for full list):
-- [ ] W0.3 CI repair (python matrix, mkdocs job, artifact paths)
-- [ ] W0.2 single canonical docker-compose stack
-- [ ] Gate 0: clean clone -> compose up -> all services healthy, on CI
+- [x] W0.3 CI repair (python matrix, mkdocs job, artifact paths)
+- [x] W0.2 single canonical docker-compose stack (deploy/legacy-compose/ archived)
+- [x] Gate 0: compose up -> 14/14 containers healthy, verified live
+- [ ] Gate 0 in CI: nightly compose-up smoke job (next)
 
 ## Test Baseline (repo-root suite, 2026-07-17)
 
 ```
-344 collected: 282 passed, 0 failed, 62 skipped (0 collection errors)
+378 collected: 317 passed, 0 failed, 61 skipped (0 collection errors)
 ```
 
 All 17 previously-failing tests are fixed by real implementations (see

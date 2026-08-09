@@ -222,18 +222,25 @@ class EventOrchestrator:
                 "galileo.events.control",
             ]
 
-            consumer = KafkaConsumer(
-                *topics,
-                bootstrap_servers=self.kafka_servers,
-                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-                auto_offset_reset='latest',
-                enable_auto_commit=True,
-                group_id='event_orchestrator',
-            )
+            # kafka-python is synchronous: run the (blocking)
+            # constructor and poll() in a worker thread so this task
+            # never starves the event loop (which previously prevented
+            # the gateway from serving any request).
+            def _make_consumer():
+                return KafkaConsumer(
+                    *topics,
+                    bootstrap_servers=self.kafka_servers,
+                    value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                    auto_offset_reset='latest',
+                    enable_auto_commit=True,
+                    group_id='event_orchestrator',
+                )
+
+            consumer = await asyncio.to_thread(_make_consumer)
             logger.info(f"Kafka consumer started for event topics: {topics}")
 
             while self.running:
-                msg_pack = consumer.poll(timeout_ms=1000)
+                msg_pack = await asyncio.to_thread(consumer.poll, timeout_ms=1000)
                 for tp, messages in msg_pack.items():
                     for message in messages:
                         await self._handle_event(message.value)
