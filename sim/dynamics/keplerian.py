@@ -169,26 +169,28 @@ def orbital_elements_to_cartesian(
     # R = R3(-Ω) @ R1(-i) @ R3(-ω)
     
     # R3(-Ω): rotation about z-axis by -RAAN
+    # (Vallado Alg. 10: r_ECI = R3(-Ω) R1(-i) R3(-ω) r_PQW, with
+    # R3(-θ) = [[c, -s, 0], [s, c, 0], [0, 0, 1]])
     cos_omega, sin_omega = jnp.cos(omega), jnp.sin(omega)
     R3_omega = jnp.array([
-        [cos_omega, sin_omega, 0.0],
-        [-sin_omega, cos_omega, 0.0],
+        [cos_omega, -sin_omega, 0.0],
+        [sin_omega, cos_omega, 0.0],
         [0.0, 0.0, 1.0]
     ])
-    
+
     # R1(-i): rotation about x-axis by -inclination
     cos_i, sin_i = jnp.cos(i), jnp.sin(i)
     R1_i = jnp.array([
         [1.0, 0.0, 0.0],
-        [0.0, cos_i, sin_i],
-        [0.0, -sin_i, cos_i]
+        [0.0, cos_i, -sin_i],
+        [0.0, sin_i, cos_i]
     ])
-    
+
     # R3(-ω): rotation about z-axis by -argument of periapsis
     cos_w, sin_w = jnp.cos(w), jnp.sin(w)
     R3_w = jnp.array([
-        [cos_w, sin_w, 0.0],
-        [-sin_w, cos_w, 0.0],
+        [cos_w, -sin_w, 0.0],
+        [sin_w, cos_w, 0.0],
         [0.0, 0.0, 1.0]
     ])
     

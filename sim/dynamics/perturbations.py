@@ -55,6 +55,15 @@ DENSITY_PARAMS = {
     1000: (3.019e-15, 268.00),
 }
 
+# Array form of the density table for traceable (jit-safe) lookup
+_DENSITY_ALTS = jnp.array(sorted(DENSITY_PARAMS.keys()), dtype=jnp.float32)
+_DENSITY_RHO0 = jnp.array(
+    [DENSITY_PARAMS[h][0] for h in sorted(DENSITY_PARAMS.keys())]
+)
+_DENSITY_SCALE_H = jnp.array(
+    [DENSITY_PARAMS[h][1] for h in sorted(DENSITY_PARAMS.keys())]
+)
+
 
 def j2_acceleration(r: Array, mu: float = GM_EARTH,
                    j2: float = J2_EARTH, r_e: float = R_EARTH) -> Array:
@@ -100,8 +109,10 @@ def j2_acceleration(r: Array, mu: float = GM_EARTH,
     r5 = r_mag ** 5
     z2_over_r2 = z ** 2 / r2
     
-    # J2 acceleration coefficient
-    coeff = -1.5 * j2 * mu * (r_e ** 2) / r5
+    # J2 acceleration coefficient (Curtis Eq. 10.39: +3/2 with these
+    # bracket terms; at the equator the perturbation points inward, at
+    # the poles outward)
+    coeff = 1.5 * j2 * mu * (r_e ** 2) / r5
     
     # Acceleration components
     ax = coeff * x * (5 * z2_over_r2 - 1)
@@ -144,25 +155,20 @@ def atmospheric_density(altitude: float) -> float:
         >>> rho_400km = atmospheric_density(400.0)
         >>> print(f"Density at 400 km: {rho_400km:.2e} kg/m³")
     """
-    # Find the appropriate altitude bin
-    altitudes = sorted(DENSITY_PARAMS.keys())
-    
-    # Handle edge cases
-    if altitude <= altitudes[0]:
-        rho0, H = DENSITY_PARAMS[altitudes[0]]
-        return rho0
-    
-    if altitude >= altitudes[-1]:
-        h0 = altitudes[-1]
-        rho0, H = DENSITY_PARAMS[h0]
-        return rho0 * jnp.exp(-(altitude - h0) / H)
-    
-    # Find bracketing altitudes
-    h0 = max([h for h in altitudes if h <= altitude])
-    rho0, H = DENSITY_PARAMS[h0]
-    
-    # Exponential decay
-    return rho0 * jnp.exp(-(altitude - h0) / H)
+    # Traceable table lookup (works under jax.jit: no Python branching
+    # on traced values). Bracketing bin via searchsorted, then
+    # exponential decay from that bin's base; altitudes above the table
+    # extrapolate with the last bin's scale height.
+    alt = jnp.clip(altitude, 0.0, None)
+    idx = jnp.clip(
+        jnp.searchsorted(_DENSITY_ALTS, alt, side="right") - 1,
+        0,
+        _DENSITY_ALTS.shape[0] - 1,
+    )
+    h0 = _DENSITY_ALTS[idx]
+    rho0 = _DENSITY_RHO0[idx]
+    scale_h = _DENSITY_SCALE_H[idx]
+    return rho0 * jnp.exp(-(alt - h0) / scale_h)
 
 
 def atmospheric_drag_acceleration(
@@ -217,16 +223,17 @@ def atmospheric_drag_acceleration(
     rho = atmospheric_density(altitude)
     
     # Velocity of atmosphere (co-rotating with Earth)
-    # v_atm = ω_earth × r
+    # v_atm = ω_earth × r ; with r in km and ω in rad/s this is already km/s
     v_atm = omega_earth * jnp.array([-r[1], r[0], 0.0])
-    
-    # Relative velocity (satellite w.r.t. atmosphere)
-    v_rel = v - v_atm / 1000.0  # Convert v_atm from m/s to km/s
+
+    # Relative velocity (satellite w.r.t. atmosphere), km/s
+    v_rel = v - v_atm
     v_rel_mag = jnp.linalg.norm(v_rel)
-    
-    # Drag acceleration (convert rho from kg/m³ to kg/km³ for consistency)
-    # Factor of 1e9 converts kg/m³ to kg/km³
-    a_drag = -0.5 * cd * area_to_mass * rho * 1e9 * v_rel_mag * v_rel
+
+    # Drag acceleration. Unit algebra with rho [kg/m³], A/m [m²/kg],
+    # v_rel [km/s]:  a[m/s²] = -1/2 rho Cd (A/m) (1000 v)² -> a[km/s²]
+    # = a[m/s²]/1000 = -1/2 rho Cd (A/m) * 1e3 * |v_rel| v_rel.
+    a_drag = -0.5 * cd * area_to_mass * rho * 1e3 * v_rel_mag * v_rel
     
     return a_drag
 
@@ -304,10 +311,10 @@ def solar_radiation_pressure_acceleration(
     in_shadow = (angle_sun_sat < 0) & (r_perp_mag < r_e)
     shadow_factor = jnp.where(in_shadow, 0.0, 1.0)
     
-    # SRP acceleration
-    # Convert p_sr from N/m² to appropriate units: N/m² = kg/(m·s²)
-    # For km/s²: multiply by 1000 (m/km)
-    a_srp = -p_sr * cr * area_to_mass * r_sat_to_sun_unit * shadow_factor * 1000.0
+    # SRP acceleration. p_sr[N/m²] * Cr * (A/m)[m²/kg] gives m/s²;
+    # 1 m/s² = 1e-3 km/s², so divide by 1000. Direction: away from the
+    # sun (-r_sat_to_sun_unit ... the leading minus sign).
+    a_srp = -p_sr * cr * area_to_mass * r_sat_to_sun_unit * shadow_factor / 1000.0
     
     return a_srp
 

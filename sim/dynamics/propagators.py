@@ -224,7 +224,13 @@ def propagate_relative_orbit(
     return propagate_orbit_jax(dynamics_wrapper, delta_state, t_span, dt)
 
 
-# JIT-compile for performance
+# JIT-compile for performance. t_span/dt must be static: they size
+# jnp.arange / the scan length, which cannot depend on traced values
+# (previously every call raised ConcretizationTypeError).
 rk4_step = jax.jit(rk4_step, static_argnames=['dynamics_func'])
-propagate_orbit_jax = jax.jit(propagate_orbit_jax, static_argnames=['dynamics_func'])
-propagate_relative_orbit = jax.jit(propagate_relative_orbit)
+propagate_orbit_jax = jax.jit(
+    propagate_orbit_jax, static_argnames=['dynamics_func', 't_span', 'dt']
+)
+propagate_relative_orbit = jax.jit(
+    propagate_relative_orbit, static_argnames=['t_span', 'dt']
+)
