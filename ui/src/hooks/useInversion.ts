@@ -6,7 +6,8 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api-client'
+import { api } from '@/lib/api-client-full'
+import { api as gatewayApi } from '@/lib/api-client'
 import toast from 'react-hot-toast'
 
 export interface InversionConfig {
@@ -166,7 +167,7 @@ export function useInversionJobs(params?: {
   return useQuery({
     queryKey: ['inversions', params],
     queryFn: async () => {
-      const response = await api.listInversions(params)
+      const response = await gatewayApi.listInversions(params)
       return response.data
     },
     refetchInterval: 5000, // Poll every 5 seconds
@@ -178,14 +179,16 @@ export function useInversionJob(jobId: string | null) {
     queryKey: ['inversion', jobId],
     queryFn: async () => {
       if (!jobId) return null
-      const response = await api.getInversionStatus(jobId)
+      const response = await gatewayApi.getInversionStatus(jobId)
       return response.data
     },
     enabled: !!jobId,
-    refetchInterval: (data) => {
-      // Poll more frequently if job is running
-      if (data?.status === 'running') return 2000
-      if (data?.status === 'queued') return 5000
+    refetchInterval: (query) => {
+      // Poll more frequently if job is running (react-query v5 passes
+      // the Query object; data lives at query.state.data)
+      const status = query.state.data?.status
+      if (status === 'running') return 2000
+      if (status === 'queued') return 5000
       return false // Stop polling if completed/failed
     },
   })
@@ -202,7 +205,7 @@ export function useStartInversion() {
       parameters?: any
       grid?: any
     }) => {
-      const response = await api.startInversion(data)
+      const response = await gatewayApi.startInversion(data)
       return response.data
     },
     onSuccess: (data) => {
@@ -220,7 +223,7 @@ export function useCancelInversion() {
 
   return useMutation({
     mutationFn: async (jobId: string) => {
-      const response = await api.cancelInversion(jobId)
+      const response = await gatewayApi.cancelInversion(jobId)
       return response.data
     },
     onSuccess: (_, jobId) => {
@@ -237,7 +240,7 @@ export function useCancelInversion() {
 export function useDownloadInversionResults() {
   return useMutation({
     mutationFn: async (params: { jobId: string; format?: string }) => {
-      const response = await api.getInversionResults(params.jobId, params.format)
+      const response = await gatewayApi.getInversionResults(params.jobId, params.format)
       return response.data
     },
     onSuccess: (blob, params) => {

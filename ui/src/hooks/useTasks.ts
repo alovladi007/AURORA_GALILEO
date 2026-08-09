@@ -85,9 +85,9 @@ export function useTaskStatus(taskId: string | null) {
       return response.data
     },
     enabled: !!taskId,
-    refetchInterval: (data) => {
+    refetchInterval: (query) => {
       // Stop polling when task is complete
-      if (data?.ready) return false
+      if (query.state.data?.ready) return false
       return 2000
     },
   })

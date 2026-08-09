@@ -20,11 +20,12 @@ interface LiveSatelliteTrackerProps {
 
 export default function LiveSatelliteTracker({
   satelliteIds = [],
-  showGravityOverlay = true,
+  showGravityOverlay: showGravityOverlayProp = true,
   autoRotate = false,
 }: LiveSatelliteTrackerProps) {
   const [selectedSatellites, setSelectedSatellites] = useState<string[]>(satelliteIds);
   const [historyLength, setHistoryLength] = useState(50); // Number of historical positions to show as orbit traces
+  const [showGravityOverlay, setShowGravityOverlay] = useState(showGravityOverlayProp);
 
   // Connect to real-time telemetry stream
   const telemetryStream = useTelemetryStream(selectedSatellites.length > 0 ? selectedSatellites : undefined);

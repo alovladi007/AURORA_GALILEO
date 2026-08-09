@@ -44,23 +44,11 @@ export function useSatelliteData({ satellites, time }: UseSatelliteDataProps) {
           timestamp: t.timestamp
         })) || []
       } catch (error) {
-        console.warn('Failed to fetch satellite data, using mock data:', error)
-        // Fallback to mock data for development
-        return satellites.map(id => ({
-          id,
-          position: {
-            lat: (Math.random() - 0.5) * 140,
-            lon: (Math.random() - 0.5) * 360,
-            alt: 450 + Math.random() * 20
-          },
-          velocity: {
-            x: Math.random() * 7.5,
-            y: Math.random() * 7.5,
-            z: Math.random() * 0.1
-          },
-          temperature: 20 + Math.random() * 10,
-          battery_level: 80 + Math.random() * 20
-        }))
+        // NEVER fabricate telemetry: an operator must be able to trust
+        // that every number on screen came from the backend. Surface
+        // the failure so the UI renders an error state instead.
+        console.error('Failed to fetch satellite data:', error)
+        throw error
       }
     },
     enabled: satellites.length > 0,

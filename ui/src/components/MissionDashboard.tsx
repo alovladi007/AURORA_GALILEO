@@ -170,27 +170,21 @@ export function MissionDashboard({ className = '' }: DashboardProps) {
   const handleCreateJob = async (type: 'plan' | 'ingest' | 'process' | 'catalog') => {
     setLoading(true)
     try {
-      let result
-      const defaultData = {
-        config: { algorithm: 'variational', degree_max: 60 }
-      }
+      // Trigger the real gateway workflow engine; each job type maps
+      // to a workflow event type.
+      const eventTypeMap = {
+        plan: 'mission.plan.requested',
+        ingest: 'data.ingest.requested',
+        process: 'processing.requested',
+        catalog: 'catalog.update.requested',
+      } as const
 
-      switch (type) {
-        case 'plan':
-          result = await api.createPlan(defaultData)
-          break
-        case 'ingest':
-          result = await api.createIngest(defaultData)
-          break
-        case 'process':
-          result = await api.createProcess(defaultData)
-          break
-        case 'catalog':
-          result = await api.createCatalog(defaultData)
-          break
-      }
+      await api.triggerWorkflow(eventTypeMap[type], {
+        config: { algorithm: 'variational', degree_max: 60 },
+        requested_at: new Date().toISOString(),
+      })
 
-      toast.success(`${type.toUpperCase()} job created successfully!`)
+      toast.success(`${type.toUpperCase()} workflow triggered`)
     } catch (error: any) {
       toast.error(`Failed to create ${type} job: ${error.response?.data?.detail || error.message}`)
     } finally {

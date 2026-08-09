@@ -145,7 +145,7 @@ export default function GlobeViewer({
           timeline: false,
           navigationHelpButton: false,
           navigationInstructionsInitiallyVisible: false,
-          imageryProvider: false as any, // Disable default imagery initially
+          baseLayer: false, // Disable default imagery initially
           terrain: undefined, // Disable terrain
         });
 

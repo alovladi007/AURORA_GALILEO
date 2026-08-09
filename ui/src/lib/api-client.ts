@@ -214,6 +214,16 @@ export const api = {
   // Health
   healthCheck: () =>
     apiClient.get('/health'),
+
+  // Workflows (real gateway workflow engine)
+  triggerWorkflow: (eventType: string, data: Record<string, unknown>) =>
+    apiClient.post('/api/v1/workflows/trigger', { event_type: eventType, data }),
+
+  listWorkflows: () =>
+    apiClient.get('/api/v1/workflows/workflows'),
+
+  listWorkflowExecutions: () =>
+    apiClient.get('/api/v1/workflows/executions'),
 }
 
 export default apiClient

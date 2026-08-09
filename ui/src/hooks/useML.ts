@@ -6,7 +6,8 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api-client'
+import { api } from '@/lib/api-client-full'
+import { api as gatewayApi } from '@/lib/api-client'
 import toast from 'react-hot-toast'
 
 export interface ModelConfig {
@@ -267,7 +268,7 @@ export function useTrainModel() {
       batch_size?: number
       learning_rate?: number
     }) => {
-      const response = await api.trainModel(data)
+      const response = await gatewayApi.trainModel(data)
       return response.data
     },
     onSuccess: (data) => {
@@ -285,13 +286,14 @@ export function useTrainingStatus(jobId: string | null) {
     queryKey: ['training-status', jobId],
     queryFn: async () => {
       if (!jobId) return null
-      const response = await api.getTrainingStatus(jobId)
+      const response = await gatewayApi.getTrainingStatus(jobId)
       return response.data
     },
     enabled: !!jobId,
-    refetchInterval: (data) => {
-      if (data?.status === 'running') return 2000
-      if (data?.status === 'pending') return 5000
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      if (status === 'running') return 2000
+      if (status === 'pending') return 5000
       return false
     },
   })
@@ -304,7 +306,7 @@ export function useListModels(params?: {
   return useQuery({
     queryKey: ['ml-models', params],
     queryFn: async () => {
-      const response = await api.listModels(params)
+      const response = await gatewayApi.listModels(params)
       return response.data
     },
     refetchInterval: 10000,
@@ -317,7 +319,7 @@ export function useModelPredict(modelId: string) {
       input_features: number[]
       options?: Record<string, string>
     }) => {
-      const response = await api.predict(modelId, data)
+      const response = await gatewayApi.predict(modelId, data)
       return response.data
     },
     onSuccess: () => {
@@ -340,7 +342,7 @@ export function useDeployModel() {
       instance_type?: string
     }) => {
       const { modelId, ...data } = params
-      const response = await api.deployModel(modelId, data)
+      const response = await gatewayApi.deployModel(modelId, data)
       return response.data
     },
     onSuccess: () => {
@@ -358,7 +360,7 @@ export function useDeleteModel() {
 
   return useMutation({
     mutationFn: async (modelId: string) => {
-      const response = await api.deleteModel(modelId)
+      const response = await gatewayApi.deleteModel(modelId)
       return response.data
     },
     onSuccess: () => {

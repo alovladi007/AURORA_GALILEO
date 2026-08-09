@@ -163,20 +163,29 @@ class WebSocketBridge:
     async def _consume_kafka(self, topic: str):
         """Consume from Kafka topic and broadcast to subscribed clients."""
         try:
-            consumer = KafkaConsumer(
-                topic,
-                bootstrap_servers=self.kafka_servers,
-                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-                auto_offset_reset='latest',
-                enable_auto_commit=True,
-                group_id=f'websocket_bridge_{topic}',
-            )
+            # kafka-python is a SYNCHRONOUS client: both the constructor
+            # (which blocks while bootstrapping) and poll() must run in a
+            # worker thread, or they block the entire event loop and the
+            # application never finishes startup.
+            def _make_consumer():
+                return KafkaConsumer(
+                    topic,
+                    bootstrap_servers=self.kafka_servers,
+                    value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                    auto_offset_reset='latest',
+                    enable_auto_commit=True,
+                    group_id=f'websocket_bridge_{topic}',
+                )
+
+            consumer = await asyncio.to_thread(_make_consumer)
             self.topic_consumers[topic] = consumer
             logger.info(f"Kafka consumer started for topic: {topic}")
 
             while self.running:
-                # Poll with timeout
-                msg_pack = consumer.poll(timeout_ms=1000)
+                # Blocking poll in a worker thread
+                msg_pack = await asyncio.to_thread(
+                    consumer.poll, timeout_ms=1000
+                )
                 for tp, messages in msg_pack.items():
                     for message in messages:
                         await self._broadcast(topic, message.value)

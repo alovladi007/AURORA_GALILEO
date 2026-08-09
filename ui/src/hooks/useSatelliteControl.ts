@@ -66,9 +66,10 @@ export function useCommandStatus(commandId: string | null) {
       return response.data
     },
     enabled: !!commandId,
-    refetchInterval: (data) => {
+    refetchInterval: (query) => {
       // Poll more frequently if command is pending
-      if (data?.status === 'pending' || data?.status === 'sent') return 2000
+      const status = query.state.data?.status
+      if (status === 'pending' || status === 'sent') return 2000
       return false // Stop polling if completed/failed
     },
   })
