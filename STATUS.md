@@ -18,7 +18,20 @@ The remediation and build program (Phases 0–6 over 18 months, with
 per-phase verification gates):
 [`MASTER_BUILD_PROMPT_18_MONTHS.md`](MASTER_BUILD_PROMPT_18_MONTHS.md).
 
-## Current Phase: Gate 0 PASSED; Phase 1 W1.1 complete; Phase 2 W2.3 auth live
+## Current Phase: Gate 0 PASSED; Phase 1 W1.1+W1.2+W1.3(core) complete; Phase 2 W2.3 auth live
+
+**Phase 1 W1.2 (2026-08):** relativity sign errors fixed (GPS +38
+us/day check passes), GNSS -2r.v/c range correction, leap-second
+boundary round-trips, clock-noise generators consistent with their own
+ADEV formulas, overlapping ADEV estimator corrected, CCSDS deframer
+stream-safe, POD covariance/DOP corrected.
+
+**Phase 1 W1.3 (core):** dynamic batch least-squares orbit
+determination (`pod/orbit_determination.py`) with two-body+J2 force
+model and JAX-autodiff measurement partials; closed-loop recovery of
+a LEO epoch state to <10 cm from 0.1 m noisy positions with credible
+formal covariance — the Gate 1 POD criterion on positions.
+gate0-smoke.yml runs the full compose stack + auth round-trip in CI.
 
 **Gate 0 (2026-08-09, verified on a live Docker stack):** 14/14
 containers healthy from the canonical `docker-compose.yaml`; gateway
@@ -57,7 +70,7 @@ In progress / next (see master prompt for full list):
 ## Test Baseline (repo-root suite, 2026-07-17)
 
 ```
-378 collected: 317 passed, 0 failed, 61 skipped (0 collection errors)
+392 collected: 331 passed, 0 failed, 61 skipped (0 collection errors)
 ```
 
 All 17 previously-failing tests are fixed by real implementations (see
