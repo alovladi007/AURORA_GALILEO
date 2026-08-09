@@ -230,3 +230,58 @@ class TestJITCallability:
         err = np.linalg.norm(np.asarray(states[-1][:3]) - np.array([a, 0, 0]))
         # allow the residual arc from period-vs-grid mismatch (<5 s * v)
         assert err < 5.0 * v_circ + 1.0
+
+
+class TestSphericalHarmonicGravity:
+    """Cross-validate the spherical-harmonic gravity implementation
+    against independent references."""
+
+    def test_two_body_limit(self):
+        from sim.gravity import load_egm2008_model, SphericalHarmonics
+        m0 = load_egm2008_model(max_degree=0)
+        a = np.asarray(SphericalHarmonics(m0).gravitational_acceleration(
+            jnp.array([7000e3, 0.0, 0.0])))
+        expected = m0.gm / 7000e3**2
+        assert np.linalg.norm(a) == pytest.approx(expected, rel=1e-5)
+        assert a[0] < 0.0
+
+    def test_j2_matches_independent_closed_form(self):
+        """SH degree-2 zonal perturbation must equal the closed-form
+        j2_acceleration from sim.dynamics.perturbations (independent
+        implementation, different units and formulation)."""
+        from sim.gravity import load_egm2008_model, SphericalHarmonics
+        m2 = load_egm2008_model(max_degree=2)
+        sh = SphericalHarmonics(m2)
+        pos_m = jnp.array([5000e3, 3000e3, 4000e3])
+        a_total = np.asarray(sh.gravitational_acceleration(pos_m))
+        r = np.linalg.norm(np.asarray(pos_m))
+        a_central = -m2.gm / r**3 * np.asarray(pos_m)
+        a_j2_sh = a_total - a_central
+        a_j2_cf = np.asarray(j2_acceleration(pos_m / 1e3)) * 1e3
+        rel = (np.linalg.norm(a_j2_sh - a_j2_cf)
+               / np.linalg.norm(a_j2_cf))
+        assert rel < 2e-2
+
+    def test_geoid_j2_bulge_analytic(self):
+        """Zonal-only geoid: N_equator - N_pole = (3/2) R J2 (spherical
+        normal field), ~10.36 km."""
+        from sim.gravity import load_egm2008_model, compute_geoid_height, J2
+        m = load_egm2008_model(max_degree=6)
+        g_eq = compute_geoid_height(np.array([0.0]), np.array([0.0]), m)[0]
+        g_po = compute_geoid_height(np.array([89.9]), np.array([0.0]), m)[0]
+        expected = 1.5 * m.reference_radius * J2
+        assert (g_eq - g_po) == pytest.approx(expected, rel=0.02)
+
+    def test_legendre_reference_values(self):
+        """P_2^0(x) = (3x^2-1)/2, P_2^2(x) = 3(1-x^2), P_3^1 at x=0.5."""
+        from sim.gravity import SphericalHarmonics
+        x = jnp.array(0.5)
+        p20 = float(SphericalHarmonics.associated_legendre(2, 0, x))
+        assert p20 == pytest.approx((3 * 0.25 - 1) / 2, abs=1e-6)
+        p22 = float(SphericalHarmonics.associated_legendre(2, 2, x))
+        assert p22 == pytest.approx(3 * (1 - 0.25), abs=1e-5)
+        # P_3^1(x) = -3/2 (5x^2-1) sqrt(1-x^2) with C-S phase; geodesy
+        # convention (no phase): +3/2 (5x^2-1) sqrt(1-x^2)
+        p31 = float(SphericalHarmonics.associated_legendre(3, 1, x))
+        assert p31 == pytest.approx(1.5 * (5 * 0.25 - 1) * np.sqrt(0.75),
+                                    abs=1e-5)
