@@ -159,3 +159,28 @@ cd ui && npm install && npm run dev`}
   served live behind the same API.
 </p>
 ```
+
+
+### Launch link (hero buttons row, detail page)
+
+A direct link into the locally running GALILEO app, honest about its
+requirement. Place after the "Source on GitHub" button:
+
+```jsx
+<a
+  href="http://localhost:13003"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="inline-flex items-center justify-center gap-2 rounded-md border border-rule-strong bg-surface px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-ink-muted hover:bg-paper-alt"
+>
+  Launch GALILEO (local)
+</a>
+<p className="mt-3 w-full text-xs text-ink-faint">
+  Opens the locally running stack — requires{' '}
+  <span className="font-mono">docker compose up</span> and the UI dev
+  server on this machine.
+</p>
+```
+
+When a hosted GALILEO deployment exists, point this link at it and
+drop the caption.
