@@ -84,7 +84,9 @@ opentelemetry-propagator-b3==1.20.0
 
 # File validation and security
 python-magic==0.4.27
-pyclamd==0.4.0  # ClamAV integration (optional)
+# pyclamd removed: only legacy/monolith-api used it, and its sdist cannot
+# build metadata on modern pip (no setuptools in the build env), which
+# aborted the whole install on fresh machines.
 cryptography==41.0.0  # For HMAC, encryption
 
 # MLOps

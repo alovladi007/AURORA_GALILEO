@@ -17,6 +17,10 @@ COPY proto/ ./proto/
 # Copy application
 COPY services/data-service/src/ ./src/
 
+# Create gen directory for protobuf output (gitignored, absent in
+# fresh clones - the build must not depend on local working-tree state)
+RUN mkdir -p src/gen
+
 # Generate protobuf code
 RUN python -m grpc_tools.protoc \
     --proto_path=proto \

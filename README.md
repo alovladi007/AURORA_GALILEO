@@ -18,18 +18,44 @@ Production-ready microservices architecture for autonomous satellite gravimetry 
 
 ## 🚀 Quick Start
 
+Requires Docker (running), Python 3.10+, and Node 18+. Commands are
+comment-free so they paste cleanly into any shell.
+
 ```bash
-# Start infrastructure services (PostgreSQL, Redis, Kafka, monitoring)
-./scripts/start-infrastructure.sh
-
-# Check services are healthy
-./scripts/check-services.sh
-
-# Access dashboards
-# Grafana:  http://localhost:13001 (admin/admin)
-# Jaeger:   http://localhost:26686
-# MinIO:    http://localhost:19001 (minioadmin/minioadmin123)
+docker compose up -d --build
 ```
+
+Wait for the stack to become healthy, then load a mission dataset and
+create the dev login through the live API (registers
+`mission-sim@galileo.dev` / `mission-scenario-2026`, ingests telemetry
+and gravity data, runs orbit determination and an inversion end to end):
+
+```bash
+pip install -r requirements-mission.txt
+python scripts/run_mission_scenario.py
+```
+
+Start the UI:
+
+```bash
+cd ui
+npm install
+npm run dev
+```
+
+Then open:
+
+| URL | What |
+| --- | --- |
+| http://localhost:13003/gravity | Anomaly map — run live inversions |
+| http://localhost:13003/ops | Operations console |
+| http://localhost:13003/dashboard | Mission dashboard |
+| http://localhost:18000/docs | API gateway (OpenAPI) |
+| http://localhost:29091 | Grafana (admin/admin) |
+| http://localhost:29090 | Prometheus |
+| http://localhost:29500 | MLflow |
+
+Sign in with `mission-sim@galileo.dev` / `mission-scenario-2026`.
 
 **📖 Documentation**:
 - [Infrastructure Setup](INFRASTRUCTURE_SETUP.md) - Start local services

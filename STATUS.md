@@ -242,3 +242,19 @@ BenchmarkResult class.
 
 Per-service suites under `services/*/tests/` run separately in CI
 (`services-tests.yml`) and remain the most reliable part of the stack.
+
+## Fresh-clone deployability (2026-08-10)
+
+A first fresh-clone deployment on a user machine surfaced two gaps,
+both fixed and re-validated by building every service image from a
+`git archive` context (tracked files only, no local working-tree
+state):
+
+- `services/data-service/Dockerfile` ran protoc into `src/gen`
+  without creating it; the gitignored directory existed only in local
+  working trees, so the image built here but failed on any fresh
+  clone. Now `mkdir -p src/gen` first (matching the other services).
+- Root `requirements.txt` aborted on `pyclamd` (legacy-only, sdist
+  cannot build metadata on modern pip). Removed; the minimal
+  dependency set for `scripts/run_mission_scenario.py` now lives in
+  `requirements-mission.txt` and the README Quick Start uses it.

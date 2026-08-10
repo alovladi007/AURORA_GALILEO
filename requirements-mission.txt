@@ -1,0 +1,15 @@
+# Minimal dependencies to run the live mission pipeline driver
+# (scripts/run_mission_scenario.py) against a running stack:
+#
+#     pip install -r requirements-mission.txt
+#     python scripts/run_mission_scenario.py
+#
+# This is the transitive closure of what mission/, pod/, sim/ and
+# control/ actually import - nothing else. The full development
+# environment is `pip install -e ".[dev,ml]"` (pyproject.toml).
+
+jax[cpu]>=0.4.20,<0.5
+numpy>=1.26,<2        # pyarrow<19 wheels are built against the 1.x ABI
+scipy>=1.11
+pandas>=2.0
+pyarrow>=14
