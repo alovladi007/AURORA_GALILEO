@@ -67,8 +67,13 @@ const HealthDot = ({ ok }: { ok: boolean }) => (
 
 export default function DashboardPage() {
   const { token, error: authError, login } = useAuthToken();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  // Dev-only convenience: prefill the documented dev account so local
+  // sign-in is one click. Production builds get empty fields.
+  const isDev = process.env.NODE_ENV === 'development';
+  const [email, setEmail] = useState(isDev ? 'mission-sim@galileo.dev' : '');
+  const [password, setPassword] = useState(
+    isDev ? 'mission-scenario-2026' : ''
+  );
 
   const [health, setHealth] = useState<any>(null);
   const [healthErr, setHealthErr] = useState<string | null>(null);

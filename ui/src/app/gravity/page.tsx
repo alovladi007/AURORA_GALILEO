@@ -110,8 +110,13 @@ function AnomalyMap({ model }: { model: ModelGrid }) {
 
 export default function GravityPage() {
   const { token, error: authError, login } = useAuthToken();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  // Dev-only convenience: prefill the documented dev account so local
+  // sign-in is one click. Production builds get empty fields.
+  const isDev = process.env.NODE_ENV === 'development';
+  const [email, setEmail] = useState(isDev ? 'mission-sim@galileo.dev' : '');
+  const [password, setPassword] = useState(
+    isDev ? 'mission-scenario-2026' : ''
+  );
   const [jobs, setJobs] = useState<any[]>([]);
   const [model, setModel] = useState<ModelGrid | null>(null);
   const [error, setError] = useState<string | null>(null);
