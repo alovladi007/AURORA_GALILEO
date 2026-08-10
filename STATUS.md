@@ -41,6 +41,20 @@ physically coupled (vibration/thermal/laser reach the fringes;
 resolvable piezo scan; visibility-degradation model), verified by 5
 new coupling tests; websockets>=11 handler compatibility.
 
+**Phase 2 W2.4 (contract):** the gateway now exposes 28 REST paths (13
+new routes backed by real gRPC RPCs: gravity ingest/query, export,
+model lifecycle, inversion list/results/cancel, satellite/command
+status, orbit prediction). docs/api/openapi.json is the contract of
+record (scripts/export_openapi.py) and tests/contract/ enforces that
+every UI client call exists in the spec and that the spec is not
+stale — the phantom-endpoint drift class is now structurally
+impossible. Verified live: authenticated gravity ingest -> gRPC ->
+TimescaleDB -> query round-trip. Also fixed en route: gateway log
+formatter (every record errored on trace_id), sub/user_id claim
+mismatch, data-service ORM/DDL schema drift (proto is the schema of
+record; composite PKs satisfy hypertable partitioning), Redis
+eviction/persistence for the auth store, stale-pool self-healing.
+
 **Gate 0 (2026-08-09, verified on a live Docker stack):** 14/14
 containers healthy from the canonical `docker-compose.yaml`; gateway
 /health reports all four gRPC services connected; register -> JWT
@@ -78,7 +92,7 @@ In progress / next (see master prompt for full list):
 ## Test Baseline (repo-root suite, 2026-07-17)
 
 ```
-397 collected: 336 passed, 0 failed, 61 skipped (0 collection errors)
+402 collected: 338 passed, 0 failed, 62 skipped (0 collection errors)
 ```
 
 All 17 previously-failing tests are fixed by real implementations (see

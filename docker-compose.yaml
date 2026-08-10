@@ -201,7 +201,10 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_dev} --maxmemory 512mb --maxmemory-policy allkeys-lru
+    # volatile-lru + AOF: the auth user store lives here; allkeys-lru
+    # could evict user records under memory pressure and without AOF a
+    # crash loses everything since the last RDB snapshot.
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_dev} --maxmemory 512mb --maxmemory-policy volatile-lru --appendonly yes
     ports:
       - "27379:6379"
     volumes:

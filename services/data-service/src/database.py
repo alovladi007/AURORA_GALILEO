@@ -16,12 +16,17 @@ Base = declarative_base()
 
 
 class SatelliteTelemetryModel(Base):
-    """Satellite telemetry data model"""
+    """Satellite telemetry data model.
+
+    Composite primary key (timestamp, id): TimescaleDB requires every
+    unique constraint to include the partition column, so a bare id PK
+    would make create_hypertable fail.
+    """
     __tablename__ = "satellite_telemetry"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    satellite_id = Column(String(100), nullable=False, index=True)
-    timestamp = Column(DateTime, nullable=False, index=True)
+    satellite_id = Column(String(100), primary_key=True, nullable=False, index=True)
+    timestamp = Column(DateTime, primary_key=True, nullable=False, index=True)
 
     # Position (ECEF coordinates)
     latitude = Column(Float, nullable=False)
@@ -51,10 +56,11 @@ class GravityMeasurementModel(Base):
     """Gravity measurement data model (aligned with data_service.proto)."""
     __tablename__ = "gravity_measurements"
 
+    # Composite PK (timestamp, id): see SatelliteTelemetryModel note.
     id = Column(Integer, primary_key=True, autoincrement=True)
     measurement_id = Column(String(128), index=True)
-    satellite_id = Column(String(100), nullable=False, index=True)
-    timestamp = Column(DateTime, nullable=False, index=True)
+    satellite_id = Column(String(100), primary_key=True, nullable=False, index=True)
+    timestamp = Column(DateTime, primary_key=True, nullable=False, index=True)
 
     # Position
     latitude = Column(Float, nullable=False)
@@ -94,6 +100,10 @@ class Database:
             settings.database_url,
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
+            # Validate pooled connections before use so a database
+            # restart doesn't surface as OperationalError on the next
+            # request (stale-pool self-healing).
+            pool_pre_ping=True,
             echo=False
         )
 

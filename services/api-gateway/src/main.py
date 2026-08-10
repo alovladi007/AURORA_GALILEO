@@ -45,11 +45,26 @@ from api.workflow_routes import router as workflow_router
 from api.event_orchestrator import get_orchestrator
 from api.metrics import MetricsMiddleware, update_service_health, grpc_call_metrics
 
-# Configure logging
+# Configure logging. The format references %(trace_id)s, so EVERY log
+# record — including ones from third-party libraries — must carry that
+# attribute or the formatter raises on every line; the filter below
+# injects it (formerly missing: every log call printed a ValueError).
+class _TraceIdFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not hasattr(record, "trace_id"):
+            try:
+                record.trace_id = get_current_trace_id() or "-"
+            except Exception:
+                record.trace_id = "-"
+        return True
+
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s - trace_id=%(trace_id)s'
 )
+for _handler in logging.getLogger().handlers:
+    _handler.addFilter(_TraceIdFilter())
 logger = logging.getLogger(__name__)
 
 # Configuration
@@ -179,15 +194,23 @@ async def get_user_context(authorization: str = Header(None)) -> common_pb2.User
             detail="Invalid or expired token"
         )
 
-    # Create user context
+    # Create user context (tokens issued by auth_v2 carry "user_id";
+    # accept legacy "sub" claims as well)
     user_context = common_pb2.UserContext(
-        user_id=payload["sub"],
+        user_id=payload.get("user_id") or payload.get("sub", ""),
         roles=payload.get("roles", []),
         permissions=payload.get("permissions", []),
         session_id=payload.get("jti", ""),
     )
 
     return user_context
+
+# Extended routes: expose the remaining gRPC RPCs (gravity, export,
+# model lifecycle, inversion list/results/cancel, satellite/command
+# status, orbit prediction). Mounted after get_user_context so the
+# router can borrow the channel manager and the auth dependency.
+from api.extended_routes import build_extended_router  # noqa: E402
+app.include_router(build_extended_router(grpc_manager, get_user_context))
 
 # Health check
 @app.get("/health")

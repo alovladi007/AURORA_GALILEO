@@ -46,12 +46,12 @@ apiClient.interceptors.response.use(
 export const api = {
   // Auth
   login: (credentials: { username: string; password: string }) =>
-    apiClient.post('/api/v1/auth/token', credentials),
+    apiClient.post('/auth/token', credentials),
 
   register: (userData: { username: string; email: string; password: string }) =>
-    apiClient.post('/api/v1/auth/register', userData),
+    apiClient.post('/auth/register', userData),
 
-  getCurrentUser: () => apiClient.get('/api/v1/auth/me'),
+  getCurrentUser: () => apiClient.get('/auth/me'),
 
   // Data Service - Telemetry
   ingestTelemetry: (data: {
@@ -110,7 +110,7 @@ export const api = {
     apiClient.post('/api/v1/models/train', data),
 
   getTrainingStatus: (jobId: string) =>
-    apiClient.get(`/api/v1/models/training/${jobId}`),
+    apiClient.get(`/api/v1/models/train/${jobId}`),
 
   listModels: (params?: {
     model_type?: string
@@ -125,13 +125,6 @@ export const api = {
     options?: Record<string, string>
   }) =>
     apiClient.post(`/api/v1/models/${modelId}/predict`, data),
-
-  batchPredict: (modelId: string, data: {
-    input_data_url: string
-    output_data_url: string
-    batch_size?: number
-  }) =>
-    apiClient.post(`/api/v1/models/${modelId}/batch-predict`, data),
 
   deployModel: (modelId: string, data: {
     deployment_name: string
