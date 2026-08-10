@@ -37,6 +37,8 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - JWT_SECRET=${JWT_SECRET:-dev-only-secret-do-not-deploy}
       - AUTH_MODE=${AUTH_MODE:-optional}
+      - PROMETHEUS_URL=http://prometheus:9090
+      - ALERTMANAGER_URL=http://alertmanager:9093
       - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_dev}
       - LOG_LEVEL=info
     depends_on:

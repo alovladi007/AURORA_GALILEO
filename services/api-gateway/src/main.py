@@ -212,6 +212,11 @@ async def get_user_context(authorization: str = Header(None)) -> common_pb2.User
 from api.extended_routes import build_extended_router  # noqa: E402
 app.include_router(build_extended_router(grpc_manager, get_user_context))
 
+# Operations console routes: real observability state (Prometheus
+# targets, Alertmanager alerts, rule states) for the ops UI.
+from api.ops_routes import build_ops_router  # noqa: E402
+app.include_router(build_ops_router(get_user_context))
+
 # Health check
 @app.get("/health")
 async def health_check():

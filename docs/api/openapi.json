@@ -1339,6 +1339,141 @@
         "summary": "Predict"
       }
     },
+    "/api/v1/ops/alerts": {
+      "get": {
+        "description": "Active alerts from Alertmanager (v2 API).",
+        "operationId": "active_alerts_api_v1_ops_alerts_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Active Alerts Api V1 Ops Alerts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Active Alerts",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/rules": {
+      "get": {
+        "description": "Configured alert rules and their evaluation state.",
+        "operationId": "alert_rules_api_v1_ops_rules_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Alert Rules Api V1 Ops Rules Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Alert Rules",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/targets": {
+      "get": {
+        "description": "Prometheus scrape-target health (job, state, last scrape).",
+        "operationId": "scrape_targets_api_v1_ops_targets_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Scrape Targets Api V1 Ops Targets Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scrape Targets",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
     "/api/v1/satellites": {
       "get": {
         "description": "List all satellites",

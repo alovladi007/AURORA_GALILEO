@@ -172,7 +172,19 @@ raised on every call — compute_control had never been callable;
 (2) the default LQR weights produce -9.4 rad/s poles and ~1600 m/s^2
 commands at the dead-band edge — deep saturation chatter that loses
 the formation by 162 km/day; the autonomy ships orbital-scale weights
-(~2e-4 m/s^2 commands, 40 min time constant, documented). (The benchmark's first version exposed a
+(~2e-4 m/s^2 commands, 40 min time constant, documented).
+
+**Phase 5 W5.3 (operations console), verified live:** new gateway ops
+routes (/api/v1/ops/targets, /alerts, /rules) proxy the in-cluster
+Prometheus/Alertmanager so the browser needs no cross-origin access,
+and the new /ops UI page shows only real state: per-service gRPC
+health, scrape-target health, alert-rule evaluation states, active
+alerts (banner when firing), and the workflow engine's registered
+workflows/executions — with 15 s auto-refresh and error states, no
+decorative badges. Verified live: the console correctly showed the
+gateway target 'down' during its own restart and recovering to 4/4 UP
+on the next scrape cycle. Spec now 32 paths; contract tests green;
+UI build green. (The benchmark's first version exposed a
 real lesson now encoded in it: inverting against the raw +/-2300 mGal
 J2 background crushes local signals — reference-field removal is
 mandatory, as in every real processor.)
@@ -215,7 +227,8 @@ In progress / next (see master prompt for full list):
 
 ```
 Root suite: 319 passed, 0 failed. Service suites: data 10, ml 16,
-control 14, inversion 26, gateway 35 — all passing.
+control 14, inversion 26, gateway 35 — all passing. Gateway spec: 32
+paths, contract-tested.
 ```
 
 All 17 previously-failing tests are fixed by real implementations (see
