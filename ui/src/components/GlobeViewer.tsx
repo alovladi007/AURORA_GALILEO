@@ -46,12 +46,28 @@ interface GlobeViewerProps {
   onTimeChange?: (time: number) => void;
 }
 
+// Stable empty defaults: inline [] defaults are new arrays on every
+// render and sit in the init effect's dependency list, which tore the
+// whole Cesium viewer down and rebuilt it on every parent re-render
+// (leaking WebGL contexts).
+const EMPTY_SAT_POSITIONS: SatellitePosition[] = [];
+const EMPTY_GRAVITY: GravityMeasurement[] = [];
+const EMPTY_TRAJECTORIES: OrbitTrajectory[] = [];
+const EMPTY_FORMATION: FormationSatellite[] = [];
+const SATELLITE_COLORS = [
+  Cesium.Color.YELLOW,
+  Cesium.Color.CYAN,
+  Cesium.Color.MAGENTA,
+  Cesium.Color.LIME,
+  Cesium.Color.ORANGE,
+];
+
 export default function GlobeViewer({
-  satellitePositions = [],
-  gravityData = [],
+  satellitePositions = EMPTY_SAT_POSITIONS,
+  gravityData = EMPTY_GRAVITY,
   showGrid = false,
-  orbitTrajectories = [],
-  formationSatellites = [],
+  orbitTrajectories = EMPTY_TRAJECTORIES,
+  formationSatellites = EMPTY_FORMATION,
   showOrbitPaths = true,
   showGroundTracks = false,
   animationEnabled = false,
@@ -73,14 +89,8 @@ export default function GlobeViewer({
     cartesian: { x: number; y: number; z: number };
   } | null>(null);
 
-  // Color palette for satellites
-  const satelliteColors = [
-    Cesium.Color.YELLOW,
-    Cesium.Color.CYAN,
-    Cesium.Color.MAGENTA,
-    Cesium.Color.LIME,
-    Cesium.Color.ORANGE,
-  ];
+  // Color palette for satellites (module-scope constant)
+  const satelliteColors = SATELLITE_COLORS;
 
   // Convert ECI/ECEF km positions to Cartesian3 (meters)
   const positionsToCartesian3 = useCallback((positions: [number, number, number][]) => {
@@ -113,6 +123,15 @@ export default function GlobeViewer({
 
     const initCesium = async () => {
       try {
+        // Never create a viewer into a zero-size container - Cesium
+        // throws 'Expected width to be greater than 0' and rendering
+        // stops for good.
+        const el = viewerContainerRef.current;
+        if (!el || el.clientWidth === 0 || el.clientHeight === 0) {
+          console.warn('[GlobeViewer] container has no size yet, retrying…');
+          setTimeout(initCesium, 200);
+          return;
+        }
         console.log('[GlobeViewer] Starting Cesium initialization...');
 
         // Set Cesium Ion token
@@ -211,7 +230,7 @@ export default function GlobeViewer({
 
         // Frame the full Earth regardless of container size
         viewer.camera.setView({
-          destination: Cesium.Cartesian3.fromDegrees(-30.0, 20.0, 2.6e7),
+          destination: Cesium.Cartesian3.fromDegrees(-30.0, 20.0, 1.2e7),
         });
 
         // Add click handler for location pinpointing
@@ -449,7 +468,7 @@ export default function GlobeViewer({
         viewerRef.current.destroy();
       }
     };
-  }, [satellitePositions, gravityData, orbitTrajectories, formationSatellites, showOrbitPaths, showGroundTracks, currentTime, positionsToCartesian3, getGroundTrack, satelliteColors]);
+  }, [satellitePositions, gravityData, orbitTrajectories, formationSatellites, showOrbitPaths, showGroundTracks, currentTime, positionsToCartesian3, getGroundTrack]);
 
   return (
     // Fill the parent container — pages decide the size. (This was

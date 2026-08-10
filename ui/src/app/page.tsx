@@ -199,7 +199,7 @@ export default function Home() {
         {/* the globe — kept from the original UI */}
         <div
           className={`${T.card} overflow-hidden`}
-          style={{ height: 460 }}
+          style={{ height: 560 }}
         >
           <GlobeViewer />
         </div>
