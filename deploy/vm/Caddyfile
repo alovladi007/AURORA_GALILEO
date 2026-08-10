@@ -1,0 +1,22 @@
+# GALILEO reverse proxy.
+#
+# DOMAIN=galileo.example.com  -> automatic HTTPS via Let's Encrypt
+# DOMAIN=localhost:80         -> plain HTTP (local validation)
+{
+	email {$ACME_EMAIL:admin@example.com}
+}
+
+{$DOMAIN}
+
+encode gzip
+
+# Gateway routes stay same-origin under the one domain; everything
+# else is the Next.js UI.
+@gateway path /api/* /auth/* /health /metrics /docs /docs/* /openapi.json /redoc /ws /ws/*
+handle @gateway {
+	reverse_proxy api-gateway:8000
+}
+
+handle {
+	reverse_proxy ui:3000
+}

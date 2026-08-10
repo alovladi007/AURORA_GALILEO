@@ -15,8 +15,10 @@
 
 import { useCallback, useState } from 'react';
 
+// ?? not ||: production builds set NEXT_PUBLIC_API_URL="" so the UI
+// talks to the gateway same-origin through the reverse proxy.
 export const GATEWAY =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:28000';
+  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:28000';
 
 export const T = {
   app: 'bg-[#faf9f7]',

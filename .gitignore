@@ -92,7 +92,6 @@ dmypy.json
 logs/
 
 # Docker
-.dockerignore
 *.tar.gz
 *.zip
 

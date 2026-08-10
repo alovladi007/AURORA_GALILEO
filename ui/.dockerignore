@@ -1,0 +1,6 @@
+node_modules
+.next
+public/Assets
+public/ThirdParty
+public/Widgets
+public/Workers
