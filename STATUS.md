@@ -274,3 +274,17 @@ without token, 200 with), mandatory JWT_SECRET, no internal ports
 published. Next session: provision a VM + DNS and run the runbook;
 then pick the credibility direction (real GRACE/GRACE-FO data vs
 Phase 6 hardening).
+
+## All CI green on main (2026-08-10, end of day)
+
+For the first time in the project's history, every workflow is green
+on main (verified in the Actions UI): CI/CD Pipeline (lean rewrite;
+351 passed / 11 skipped incl. the newly-executing torch ML suite),
+Microservices Tests, Gate 0 Smoke, and Security Scanning (service
+images + real dependency sets). Fixes en route surfaced one real
+latent bug (cross-gradient loss shape alignment) plus missing ml
+package exports and two flawed tests.
+
+Next session: provision VM + DNS, run docs/DEPLOY_VM.md, swap the
+Atlas launch link to the public URL, then the credibility direction
+(recommended: real GRACE/GRACE-FO data ingestion).
