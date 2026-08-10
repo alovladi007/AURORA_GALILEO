@@ -254,6 +254,22 @@ def build_extended_router(grpc_manager, get_user_context: Callable) -> APIRouter
         except grpc.RpcError as e:
             raise _grpc_http_error(e, "inversion service")
 
+    @router.get("/inversions/{job_id}/model")
+    async def get_inversion_model(
+        job_id: str,
+        user_context: common_pb2.UserContext = Depends(get_user_context),
+    ):
+        """Georeferenced inversion model grid for map rendering."""
+        try:
+            resp = await grpc_manager.stubs["inversion"].GetDensityModel(
+                inversion_service_pb2.GetDensityModelRequest(
+                    job_id=job_id, user_context=user_context
+                )
+            )
+            return MessageToDict(resp, preserving_proto_field_name=True)
+        except grpc.RpcError as e:
+            raise _grpc_http_error(e, "inversion service")
+
     @router.delete("/inversions/{job_id}")
     async def cancel_inversion(
         job_id: str,

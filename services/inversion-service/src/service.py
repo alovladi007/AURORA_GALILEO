@@ -6,6 +6,7 @@ InversionEngine, tracks job progress, and serializes results to storage.
 """
 
 import grpc
+import numpy as np
 import logging
 from datetime import datetime
 
@@ -124,6 +125,12 @@ class InversionServicer(inversion_service_pb2_grpc.InversionServiceServicer):
 
             method = request.parameters.method or "tikhonov"
             config = {"grid_rows": str(rows), "grid_cols": str(cols)}
+            # Preserve geographic bounds so the model can be served as
+            # a georeferenced map later (GetDensityModel).
+            for k in ("min_latitude", "max_latitude",
+                      "min_longitude", "max_longitude"):
+                if k in data_query:
+                    config[k] = data_query[k]
             if request.parameters.max_iterations:
                 config["max_iterations"] = str(request.parameters.max_iterations)
 
@@ -142,6 +149,48 @@ class InversionServicer(inversion_service_pb2_grpc.InversionServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return inversion_service_pb2.StartInversionResponse()
+
+    def GetDensityModel(self, request, context):
+        """Return the completed inversion model as a georeferenced grid
+        (used by the gateway /model route and the UI anomaly map)."""
+        try:
+            job = self.engine.get(request.job_id)
+            if not job:
+                context.set_code(grpc.StatusCode.NOT_FOUND)
+                context.set_details(f"job {request.job_id} not found")
+                return inversion_service_pb2.GetDensityModelResponse()
+            if job.status != "completed" or job.model is None:
+                context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
+                context.set_details(f"job {request.job_id} is {job.status}")
+                return inversion_service_pb2.GetDensityModelResponse()
+
+            rows = int(job.config.get("grid_rows", 12))
+            cols = int(job.config.get("grid_cols", 12))
+            model = inversion_service_pb2.DensityModel(
+                model_id=f"model_{job.job_id}",
+                job_id=job.job_id,
+                density_values=[float(v) for v in np.asarray(job.model).ravel()],
+                rms_residual=float(job.residual or 0.0),
+            )
+            if job.uncertainties is not None:
+                model.uncertainty_values.extend(
+                    float(v) for v in np.asarray(job.uncertainties).ravel())
+            model.grid.num_lat_points = rows
+            model.grid.num_lon_points = cols
+            model.grid.min_latitude = float(job.config.get("min_latitude", -90))
+            model.grid.max_latitude = float(job.config.get("max_latitude", 90))
+            model.grid.min_longitude = float(job.config.get("min_longitude", -180))
+            model.grid.max_longitude = float(job.config.get("max_longitude", 180))
+            stats = np.asarray(job.model)
+            model.statistics["min"] = float(stats.min())
+            model.statistics["max"] = float(stats.max())
+            model.statistics["mean"] = float(stats.mean())
+            return inversion_service_pb2.GetDensityModelResponse(model=model)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("GetDensityModel failed")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return inversion_service_pb2.GetDensityModelResponse()
 
     def GetInversionStatus(self, request, context):
         """Get real-time status of an inversion job.

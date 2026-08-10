@@ -109,6 +109,16 @@ measurements fetched via gRPC, binned to a 16x16 grid (29 ground-track
 cells), inverted, and polled to completion through the gateway.
 Mission script now runs all 7 stages.
 
+**Phase 3 W3.4 + Phase 5 W5.2 (first product view), verified live:**
+GetDensityModel implemented (georeferenced model grid with bounds and
+statistics) and exposed as GET /api/v1/inversions/{id}/model (spec now
+29 paths, contract tests green). The served model visibly carries the
+J2 physics (row means 907 -> 104 -> 762 mGal from south pole to
+equator to north). New UI page /gravity: real JWT sign-in, trigger
+inversions on the ingested mission data, poll to completion, and
+render the anomaly map from the served grid on a canvas — with error
+states, no client-side fallbacks. UI builds clean (0 type errors).
+
 **Gate 0 (2026-08-09, verified on a live Docker stack):** 14/14
 containers healthy from the canonical `docker-compose.yaml`; gateway
 /health reports all four gRPC services connected; register -> JWT
