@@ -64,6 +64,12 @@ jobs:
   container-scanning:
     name: Container Security Scan
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The images that actually deploy (the monolith Dockerfile is
+        # retired under legacy/)
+        service: [api-gateway, data-service, ml-service, inversion-service, control-service]
 
     steps:
       - name: Checkout code
@@ -72,14 +78,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      - name: Build service image
         run: |
-          docker build -t galileo-api:scan -f Dockerfile .
+          docker build -t galileo-${{ matrix.service }}:scan \
+            -f services/${{ matrix.service }}/Dockerfile .
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'galileo-api:scan'
+          image-ref: 'galileo-${{ matrix.service }}:scan'
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -89,11 +96,12 @@ jobs:
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
+          category: 'trivy-${{ matrix.service }}'
 
       - name: Run Trivy in table format
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'galileo-api:scan'
+          image-ref: 'galileo-${{ matrix.service }}:scan'
           format: 'table'
           severity: 'CRITICAL,HIGH,MEDIUM'
 
@@ -156,21 +164,33 @@ jobs:
 
       - name: Check licenses
         run: |
-          pip install -r requirements.txt
-          pip-licenses --format=json --output-file=licenses.json
-          pip-licenses --format=markdown --output-file=licenses.md
-
-          # Check for GPL licenses (may not be compatible with commercial use)
-          echo "Checking for GPL licenses..."
-          pip-licenses | grep -i GPL || echo "No GPL licenses found"
+          # License-check the dependency sets that actually ship: each
+          # service's requirements in its own venv (their pins are
+          # intentionally independent), plus the mission-pipeline set.
+          # The legacy flat requirements.txt is not installed anywhere.
+          set -e
+          mkdir -p license-reports
+          for req in services/*/requirements.txt requirements-mission.txt; do
+            name=$(echo "$req" | tr '/' '-')
+            echo "=== $req ==="
+            python -m venv "/tmp/venv-$name"
+            "/tmp/venv-$name/bin/pip" install --quiet --upgrade pip pip-licenses
+            "/tmp/venv-$name/bin/pip" install --quiet -r "$req"
+            "/tmp/venv-$name/bin/pip-licenses" --format=json \
+              --output-file="license-reports/$name.json"
+            "/tmp/venv-$name/bin/pip-licenses" --format=markdown \
+              --output-file="license-reports/$name.md"
+            echo "Checking for GPL licenses in $req..."
+            "/tmp/venv-$name/bin/pip-licenses" | grep -i GPL \
+              || echo "No GPL licenses found"
+            rm -rf "/tmp/venv-$name"
+          done
 
       - name: Upload license report
         uses: actions/upload-artifact@v4
         with:
           name: license-report
-          path: |
-            licenses.json
-            licenses.md
+          path: license-reports/
           retention-days: 90
 
   security-summary:
