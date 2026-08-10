@@ -258,3 +258,19 @@ state):
   cannot build metadata on modern pip). Removed; the minimal
   dependency set for `scripts/run_mission_scenario.py` now lives in
   `requirements-mission.txt` and the README Quick Start uses it.
+
+
+## Hosted deployment ready (2026-08-10)
+
+Branch merged to main (fast-forward through 53259c8; root suite 319
+passed as the merge gate - GitHub Actions runs on main should be
+checked in the repo UI, as this session cannot see them).
+
+Single-VM production deployment shipped and validated locally end to
+end (docker-compose.prod.yaml + deploy/vm/Caddyfile +
+docs/DEPLOY_VM.md): Caddy TLS termination and same-origin path
+routing, production Next.js image, AUTH_MODE=required (verified 401
+without token, 200 with), mandatory JWT_SECRET, no internal ports
+published. Next session: provision a VM + DNS and run the runbook;
+then pick the credibility direction (real GRACE/GRACE-FO data vs
+Phase 6 hardening).
