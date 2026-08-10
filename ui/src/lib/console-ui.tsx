@@ -1,15 +1,16 @@
 'use client';
 
 /**
- * GALILEO console design system — shared by /dashboard, /gravity, /ops.
+ * GALILEO console design system — shared by every page.
  *
- * Committed light theme:
- *   surfaces  #f6f7f9 app · #ffffff cards & rail
- *   ink       #101828 primary · #475467 secondary · #98a2b3 muted
- *   accent    #2a78d6 (validated series-1 on the light surface)
+ * ATLAS corporate palette (GALILEO is an ATLAS simulation platform;
+ * values extracted from the published ATLAS site):
+ *   surfaces  #faf9f7 paper · #ffffff cards · #f3f1ed alt band
+ *   ink       #14171a primary · #3d4248 secondary · #93979d muted
+ *   accent    #c2410c burnt orange · #9a3412 hover · #fdf1ea tint
+ *   borders   #ddd9d3
  *   status    good/warning/serious/critical — always rendered as a
- *             pill with a text label, never color alone; each pill
- *             pairs a dark readable text step with a soft tint.
+ *             pill with a text label, never color alone.
  */
 
 import { useCallback, useState } from 'react';
@@ -18,18 +19,21 @@ export const GATEWAY =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:28000';
 
 export const T = {
-  app: 'bg-[#f6f7f9]',
-  card: 'bg-white border border-[#e4e7ec] rounded-xl shadow-sm',
-  rail: 'bg-white border-r border-[#e4e7ec]',
-  ink: 'text-[#101828]',
-  ink2: 'text-[#475467]',
-  ink3: 'text-[#98a2b3]',
-  accent: '#2a78d6',
-  divider: 'border-[#e4e7ec]',
+  app: 'bg-[#faf9f7]',
+  alt: 'bg-[#f3f1ed]',
+  card: 'bg-white border border-[#ddd9d3] rounded-lg',
+  rail: 'bg-white border-r border-[#ddd9d3]',
+  ink: 'text-[#14171a]',
+  ink2: 'text-[#3d4248]',
+  ink3: 'text-[#93979d]',
+  accent: '#c2410c',
+  accentHover: '#9a3412',
+  accentTint: '#fdf1ea',
+  divider: 'border-[#e7e3dc]',
   input:
-    'rounded-lg bg-white border border-[#d0d5dd] px-3 py-2 text-sm text-[#101828] focus:outline-none focus:border-[#2a78d6]',
+    'rounded-md bg-white border border-[#ddd9d3] px-3 py-2 text-sm text-[#14171a] focus:outline-none focus:border-[#c2410c]',
   btnGhost:
-    'inline-flex items-center gap-2 rounded-lg border border-[#d0d5dd] bg-white px-3.5 py-2 text-sm hover:bg-[#f9fafb] text-[#344054]',
+    'inline-flex items-center gap-2 rounded-md border border-[#ddd9d3] bg-white px-3.5 py-2 text-sm hover:bg-[#f3f1ed] text-[#3d4248]',
 };
 
 /** Reserved status roles — dark readable text over a soft tint. */
@@ -141,7 +145,7 @@ export function Card({
   return (
     <div className={`${T.card} ${className}`}>
       {(title || actions) && (
-        <div className="flex items-start justify-between px-5 pt-4 pb-3 border-b border-[#e4e7ec]">
+        <div className="flex items-start justify-between px-5 pt-4 pb-3 border-b border-[#e7e3dc]">
           <div>
             {title && (
               <h2 className={`text-sm font-semibold ${T.ink}`}>{title}</h2>
@@ -196,7 +200,7 @@ export function StatTile({
 }
 
 export const Th = ({ children }: { children: React.ReactNode }) => (
-  <th className="pb-2.5 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-[#667085]">
+  <th className="pb-2.5 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-[#93979d]">
     {children}
   </th>
 );
@@ -207,17 +211,17 @@ export const pct = (p: any) =>
 export function OrbitMark() {
   return (
     <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <circle cx="17" cy="17" r="7" stroke="#2a78d6" strokeWidth="1.8" />
+      <circle cx="17" cy="17" r="7" stroke="#c2410c" strokeWidth="1.8" />
       <ellipse
         cx="17"
         cy="17"
         rx="15"
         ry="6"
-        stroke="#98a2b3"
+        stroke="#93979d"
         strokeWidth="1.2"
         transform="rotate(-22 17 17)"
       />
-      <circle cx="29.5" cy="11.5" r="2.2" fill="#2a78d6" />
+      <circle cx="29.5" cy="11.5" r="2.2" fill="#c2410c" />
     </svg>
   );
 }
@@ -329,7 +333,7 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <header className="flex items-center justify-between px-8 py-4 border-b border-[#e4e7ec]">
+    <header className="flex items-center justify-between px-8 py-4 border-b border-[#e7e3dc]">
       <div className="flex items-center gap-4">
         <a href="/dashboard" className="flex items-center gap-3">
           <OrbitMark />

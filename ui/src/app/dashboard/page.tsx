@@ -238,7 +238,7 @@ export default function DashboardPage() {
             {jobs.slice(0, 12).map((j: any) => (
               <tr
                 key={j.job_id}
-                className="border-t border-[#e4e7ec] hover:bg-[#f9fafb]"
+                className="border-t border-[#e7e3dc] hover:bg-[#f7f5f1]"
               >
                 <td className={`py-2.5 pr-4 font-mono text-xs ${T.ink2}`}>
                   {j.job_id}
@@ -412,7 +412,7 @@ export default function DashboardPage() {
                   {rows.slice(0, 10).map((m: any, i: number) => (
                     <tr
                       key={i}
-                      className="border-t border-[#e4e7ec] hover:bg-[#f9fafb]"
+                      className="border-t border-[#e7e3dc] hover:bg-[#f7f5f1]"
                     >
                       <td className={`py-2 pr-4 ${T.ink}`}>
                         {m.satellite_id}
@@ -644,9 +644,9 @@ export default function DashboardPage() {
                 key={s.id}
                 onClick={() => setSection(s.id)}
                 className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
-                  active ? 'bg-[#eaf2fc]' : 'hover:bg-[#f2f4f7]'
+                  active ? 'bg-[#fdf1ea]' : 'hover:bg-[#f3f1ed]'
                 }`}
-                style={active ? { color: '#1b4d85' } : undefined}
+                style={active ? { color: '#9a3412' } : undefined}
               >
                 <span
                   className={active ? '' : T.ink3}
@@ -666,7 +666,7 @@ export default function DashboardPage() {
             );
           })}
         </nav>
-        <div className="mt-auto px-5 py-5 space-y-2 border-t border-[#e4e7ec]">
+        <div className="mt-auto px-5 py-5 space-y-2 border-t border-[#e7e3dc]">
           <Link
             href="/gravity"
             className="flex items-center gap-2 text-[13px]"
@@ -688,7 +688,7 @@ export default function DashboardPage() {
       </aside>
 
       <main className="flex-1 overflow-x-hidden">
-        <header className="flex items-center justify-between px-8 py-4 border-b border-[#e4e7ec]">
+        <header className="flex items-center justify-between px-8 py-4 border-b border-[#e7e3dc]">
           <div className="flex items-center gap-4">
             <h1 className="text-lg font-semibold tracking-tight">
               {SECTIONS.find((s) => s.id === section)?.name}

@@ -81,7 +81,7 @@ function AnomalyMap({ model }: { model: ModelGrid }) {
         ref={canvasRef}
         width={640}
         height={320}
-        className="w-full rounded-lg border border-[#e4e7ec]"
+        className="w-full rounded-lg border border-[#e7e3dc]"
       />
       <div
         className={`flex justify-between text-xs mt-2 ${T.ink3}`}
@@ -300,7 +300,7 @@ export default function GravityPage() {
                 {jobs.map((j) => (
                   <tr
                     key={j.job_id}
-                    className="border-t border-[#e4e7ec] hover:bg-[#f9fafb]"
+                    className="border-t border-[#e7e3dc] hover:bg-[#f7f5f1]"
                   >
                     <td className={`py-2.5 pr-4 font-mono text-xs ${T.ink2}`}>
                       {j.job_id}
