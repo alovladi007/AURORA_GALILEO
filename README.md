@@ -28,12 +28,18 @@ docker compose up -d --build
 Wait for the stack to become healthy, then load a mission dataset and
 create the dev login through the live API (registers
 `mission-sim@galileo.dev` / `mission-scenario-2026`, ingests telemetry
-and gravity data, runs orbit determination and an inversion end to end):
+and gravity data, runs orbit determination and an inversion end to end).
+This runs inside Docker so no host Python is required:
 
 ```bash
-pip install -r requirements-mission.txt
-python scripts/run_mission_scenario.py
+docker compose run --rm mission-scenario
 ```
+
+(Equivalent on a host Python 3.10+ with native wheels for your CPU:
+`pip install -r requirements-mission.txt && python
+scripts/run_mission_scenario.py`. Note that an x86 Anaconda running
+under Rosetta on Apple Silicon cannot run jaxlib — use the Docker
+form there.)
 
 Start the UI:
 

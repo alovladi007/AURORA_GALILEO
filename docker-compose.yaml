@@ -369,11 +369,33 @@ services:
         condition: service_started
     networks: [galileo]
 
+  # ── One-shot mission pipeline runner ──────────────────────────────
+  # Runs scripts/run_mission_scenario.py against the live stack from
+  # inside the compose network, so no host Python is needed (avoids
+  # e.g. x86 Anaconda under Rosetta, whose jaxlib wheels need AVX).
+  # Not started by `up`; invoke on demand:
+  #     docker compose run --rm mission-scenario
+  mission-scenario:
+    image: python:3.11-slim
+    profiles: ["pipeline"]
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - pip-cache:/root/.cache/pip
+    command: >
+      bash -c "pip install -q -r requirements-mission.txt
+      && python scripts/run_mission_scenario.py --gateway http://api-gateway:8000"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks: [galileo]
+
 networks:
   galileo:
     driver: bridge
 
 volumes:
+  pip-cache:
   postgres-data:
   redis-data:
   minio-data:
