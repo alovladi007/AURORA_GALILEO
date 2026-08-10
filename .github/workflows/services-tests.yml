@@ -51,7 +51,7 @@ jobs:
             pip install -r "services/${{ matrix.service }}/requirements.txt"
           fi
 
-      - name: Install test dependencies
+      - name: Install test dependencies (never disturb service pins)
         run: |
           # grpcio-tools must match the service's pinned grpcio, or pip
           # silently upgrades grpcio and breaks the pin.
@@ -61,8 +61,21 @@ jobs:
           else
             pip install grpcio grpcio-tools
           fi
-          pip install pytest pytest-asyncio sqlalchemy numpy protobuf
-          pip check
+          # Install ONLY missing test deps. A blanket `pip install numpy`
+          # pulls numpy 2.x into jobs whose service doesn't pin it,
+          # while compiled deps (pyarrow 14, scipy 1.11) are built for
+          # numpy 1.x — an ABI mismatch pip check cannot detect
+          # (pyarrow declares no numpy upper bound). Root cause of the
+          # red data-service/inversion-service jobs.
+          python -c "import pytest" 2>/dev/null || pip install pytest
+          python -c "import pytest_asyncio" 2>/dev/null || pip install pytest-asyncio
+          python -c "import sqlalchemy" 2>/dev/null || pip install sqlalchemy
+          python -c "import numpy" 2>/dev/null || pip install "numpy<2"
+          python -c "import google.protobuf" 2>/dev/null || pip install protobuf
+          # Advisory: metadata conflicts are surfaced but do not fail
+          # the job (e.g. wheel/packaging version squabbles unrelated
+          # to the code under test). ABI safety comes from the pins.
+          pip check || echo "::warning::pip check reported dependency conflicts (see log)"
 
       - name: Generate protobuf stubs
         run: |

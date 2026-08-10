@@ -9,5 +9,12 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 # Streaming, export and storage (optional features degrade gracefully if absent)
 kafka-python==2.0.2
+# pyarrow 14 wheels are built against numpy 1.26 and declare no upper
+# bound, so an unconstrained resolve pulls numpy 2.x (forward ABI
+# break: "compiled using NumPy 1.x cannot be run in NumPy 2.x"),
+# while numpy<1.26 breaks the other way ("numpy.core.multiarray
+# failed to import"). Both failure modes reproduced; this window is
+# the one that imports cleanly.
+numpy>=1.26,<2
 pyarrow==14.0.2
 minio==7.2.0
