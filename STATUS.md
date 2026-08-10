@@ -55,6 +55,17 @@ mismatch, data-service ORM/DDL schema drift (proto is the schema of
 record; composite PKs satisfy hypertable partitioning), Redis
 eviction/persistence for the auth store, stale-pool self-healing.
 
+**Phase 2 W2.1 (monolith retired):** the FastAPI monolith (api/) and
+its Celery layer (ops/*.py) are archived under legacy/ — the gRPC
+microservices + gateway are the only backend. The monolith's api/
+package name was shadowing the gateway's api package in test runs
+(root cause of the CI service-suite failures). ops/db and ops/nginx
+remain live (mounted by compose). Also fixed from CI: orchestrator/
+bridge now use Kafka only when KAFKA_BOOTSTRAP_SERVERS is set (library
+presence alone caused infinite retries and starved the in-process
+queue), tuner job-id collisions within the same second, and the
+conditional-mlflow test patch. All five service suites green.
+
 **Gate 0 (2026-08-09, verified on a live Docker stack):** 14/14
 containers healthy from the canonical `docker-compose.yaml`; gateway
 /health reports all four gRPC services connected; register -> JWT
@@ -92,7 +103,9 @@ In progress / next (see master prompt for full list):
 ## Test Baseline (repo-root suite, 2026-07-17)
 
 ```
-402 collected: 338 passed, 0 failed, 62 skipped (0 collection errors)
+Root suite: 298 passed, 0 failed (csrf/circuit-breaker tests moved
+into the gateway suite). Service suites: data 10, ml 16, control 14,
+inversion 22, gateway 35 — all passing.
 ```
 
 All 17 previously-failing tests are fixed by real implementations (see

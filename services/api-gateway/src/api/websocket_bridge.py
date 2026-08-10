@@ -10,6 +10,7 @@ degradation when Kafka is unavailable.
 from __future__ import annotations
 
 import asyncio
+import os
 import json
 import logging
 from typing import Dict, Set, Optional, Any
@@ -100,7 +101,10 @@ class WebSocketBridge:
         self.running = True
         logger.info("Starting WebSocket bridge")
 
-        if _HAS_KAFKA:
+        # See event_orchestrator: kafka only with an explicitly
+        # configured broker, else in-process queues.
+        use_kafka = _HAS_KAFKA and bool(os.getenv("KAFKA_BOOTSTRAP_SERVERS"))
+        if use_kafka:
             # Start Kafka consumer tasks
             asyncio.create_task(self._consume_kafka("galileo.telemetry"))
             asyncio.create_task(self._consume_kafka("galileo.gravity"))

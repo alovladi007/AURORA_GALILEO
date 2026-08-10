@@ -14,6 +14,7 @@ Workflows are defined declaratively and executed asynchronously.
 from __future__ import annotations
 
 import asyncio
+import os
 import json
 import logging
 from datetime import datetime
@@ -191,7 +192,12 @@ class EventOrchestrator:
         self.register_default_workflows()
         logger.info("Event orchestrator started")
 
-        if _HAS_KAFKA:
+        # Kafka mode requires BOTH the library and an explicitly
+        # configured broker (KAFKA_BOOTSTRAP_SERVERS). With the library
+        # installed but no broker, the kafka consumer would retry
+        # forever while the in-process queue never drains.
+        use_kafka = _HAS_KAFKA and bool(os.getenv("KAFKA_BOOTSTRAP_SERVERS"))
+        if use_kafka:
             # Start Kafka consumer for each event topic
             asyncio.create_task(self._consume_events_kafka())
         else:

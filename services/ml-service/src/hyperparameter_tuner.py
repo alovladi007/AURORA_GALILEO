@@ -19,6 +19,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
+import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -91,7 +92,9 @@ class HyperparameterTuner:
         Returns:
             job_id: Unique identifier for the tuning job
         """
-        job_id = f"tune_{int(datetime.utcnow().timestamp())}"
+        # Timestamp alone collides when two jobs start within the same
+        # second; add a random suffix for uniqueness.
+        job_id = f"tune_{int(datetime.utcnow().timestamp())}_{uuid.uuid4().hex[:6]}"
 
         with self._lock:
             job = TuningJob(

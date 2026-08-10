@@ -195,7 +195,8 @@ class TestHyperparameterTuner:
         y3 = tuner._synthetic_gravity(X, seed=123)
         assert not np.allclose(y1, y3)
 
-    @patch('src.hyperparameter_tuner.mlflow')
+    @patch('src.hyperparameter_tuner._HAS_MLFLOW', True)
+    @patch('src.hyperparameter_tuner.mlflow', create=True)
     def test_mlflow_integration(self, mock_mlflow):
         """MLflow tracking is called when available."""
         tuner = HyperparameterTuner(mlflow_tracking_uri="http://mlflow:5000")

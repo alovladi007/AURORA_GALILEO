@@ -18,15 +18,20 @@ Base = declarative_base()
 class SatelliteTelemetryModel(Base):
     """Satellite telemetry data model.
 
-    Composite primary key (timestamp, id): TimescaleDB requires every
-    unique constraint to include the partition column, so a bare id PK
-    would make create_hypertable fail.
+    NOTE on primary keys: on PostgreSQL/TimescaleDB the table is
+    created by ops/db/timescale_setup.sql with a composite PK
+    (timestamp, satellite_id, id) — hypertable partitioning requires
+    the partition columns in every unique constraint — and create_all
+    skips the existing table. The single-id PK below applies only to
+    the SQLite fixtures used in unit tests (SQLite cannot compile an
+    autoincrement column inside a composite PK). Alembic will unify
+    this in Phase 2 W2.2.
     """
     __tablename__ = "satellite_telemetry"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    satellite_id = Column(String(100), primary_key=True, nullable=False, index=True)
-    timestamp = Column(DateTime, primary_key=True, nullable=False, index=True)
+    satellite_id = Column(String(100), nullable=False, index=True)
+    timestamp = Column(DateTime, nullable=False, index=True)
 
     # Position (ECEF coordinates)
     latitude = Column(Float, nullable=False)
@@ -56,11 +61,12 @@ class GravityMeasurementModel(Base):
     """Gravity measurement data model (aligned with data_service.proto)."""
     __tablename__ = "gravity_measurements"
 
-    # Composite PK (timestamp, id): see SatelliteTelemetryModel note.
+    # See SatelliteTelemetryModel note: PG DDL owns the composite PK;
+    # the single-id PK is for the SQLite test fixtures only.
     id = Column(Integer, primary_key=True, autoincrement=True)
     measurement_id = Column(String(128), index=True)
-    satellite_id = Column(String(100), primary_key=True, nullable=False, index=True)
-    timestamp = Column(DateTime, primary_key=True, nullable=False, index=True)
+    satellite_id = Column(String(100), nullable=False, index=True)
+    timestamp = Column(DateTime, nullable=False, index=True)
 
     # Position
     latitude = Column(Float, nullable=False)
