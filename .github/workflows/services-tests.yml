@@ -69,11 +69,32 @@ jobs:
           chmod +x scripts/generate_protos.sh
           ./scripts/generate_protos.sh
 
+      - name: Environment snapshot
+        run: |
+          python3 --version
+          pip freeze | grep -Ei "numpy|scipy|grpcio|protobuf|pytest|pydantic|sqlalchemy|netCDF4|pyarrow" || true
+
       - name: Run ${{ matrix.service }} tests
         working-directory: services/${{ matrix.service }}
         run: |
+          set -o pipefail
           PYTHONPATH="src:src/gen" python3 -m pytest tests/ \
-            -o addopts="" -p no:cacheprovider -v
+            -o addopts="" -p no:cacheprovider -v 2>&1 | tee /tmp/pytest.log || {
+              echo "::group::pytest failure tail"
+              tail -80 /tmp/pytest.log
+              echo "::endgroup::"
+              # Surface the failure summary as annotations
+              grep -E "^(FAILED|ERROR|E  )" /tmp/pytest.log | head -10 | \
+                while IFS= read -r line; do echo "::error::${line}"; done
+              exit 1
+            }
+
+      - name: Upload pytest log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-log-${{ matrix.service }}
+          path: /tmp/pytest.log
 
   all-services-summary:
     name: All services test summary
