@@ -180,7 +180,8 @@ class LQGController:
         self.x_hat = jnp.zeros(self.n_states)
         self.P_est = jnp.eye(self.n_states)
     
-    @jax.jit
+    # NOTE: no @jax.jit here - jitting an instance method traces
+    # `self` (not a pytree) and raises on every call.
     def predict(
         self,
         x_hat: jnp.ndarray,
@@ -204,7 +205,8 @@ class LQGController:
         
         return x_hat_pred, P_pred
     
-    @jax.jit
+    # NOTE: no @jax.jit here - jitting an instance method traces
+    # `self` (not a pytree) and raises on every call.
     def update(
         self,
         x_hat_pred: jnp.ndarray,
@@ -239,7 +241,8 @@ class LQGController:
         
         return x_hat, P
     
-    @jax.jit
+    # NOTE: no @jax.jit here - jitting an instance method traces
+    # `self` (not a pytree) and raises on every call.
     def compute_control(
         self,
         x_hat: jnp.ndarray,

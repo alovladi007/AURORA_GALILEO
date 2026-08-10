@@ -156,7 +156,23 @@ a method selector (Tikhonov vs ML). Verified live end-to-end: an
 ML-completion map of the ingested mission measurements served over
 REST with correct J2 physics (range -1169..+2221 mGal). A service
 test pins the served result bit-equal to the shipped model's own
-prediction. (The benchmark's first version exposed a
+prediction.
+
+**Phase 4 W4.3 (station-keeping autonomy) — Gate 4 criterion met:**
+mission/autonomy.py runs dead-band LQR station keeping on the real
+control.controllers assets: 24 simulated hours without intervention,
+formation box held (final error inside the 50 m dead-band), episodic
+burns with <50% thrust duty cycle, exact per-burn delta-v accounting
+within budget, monotone fuel-vs-disturbance behavior, and an FDIR path
+that stops thrusting and flags when the budget is exhausted (never
+silently overspends). Two REAL control-package defects found and
+fixed by the acceptance tests: (1) eight @jax.jit decorations on
+instance methods across lqr/lqg/station_keeping traced `self` and
+raised on every call — compute_control had never been callable;
+(2) the default LQR weights produce -9.4 rad/s poles and ~1600 m/s^2
+commands at the dead-band edge — deep saturation chatter that loses
+the formation by 162 km/day; the autonomy ships orbital-scale weights
+(~2e-4 m/s^2 commands, 40 min time constant, documented). (The benchmark's first version exposed a
 real lesson now encoded in it: inverting against the raw +/-2300 mGal
 J2 background crushes local signals — reference-field removal is
 mandatory, as in every real processor.)
@@ -198,8 +214,8 @@ In progress / next (see master prompt for full list):
 ## Test Baseline (repo-root suite, 2026-07-17)
 
 ```
-Root suite: 313 passed, 0 failed. Service suites: data 10, ml 16,
-control 14, inversion 25, gateway 35 — all passing.
+Root suite: 319 passed, 0 failed. Service suites: data 10, ml 16,
+control 14, inversion 26, gateway 35 — all passing.
 ```
 
 All 17 previously-failing tests are fixed by real implementations (see

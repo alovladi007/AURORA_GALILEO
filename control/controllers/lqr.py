@@ -266,7 +266,8 @@ class FormationLQRController:
         else:
             self.K, self.P = lqr_gain_continuous(self.A, self.B, Q, R)
     
-    @jax.jit
+    # NOTE: no @jax.jit here - jitting an instance method traces
+    # `self` (not a pytree) and raises on every call.
     def compute_control(
         self,
         state: jnp.ndarray,

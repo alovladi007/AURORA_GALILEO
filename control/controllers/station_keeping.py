@@ -94,7 +94,8 @@ class DeadBandController:
             radial_max=box.radial_max - margin[2]
         )
     
-    @jax.jit
+    # NOTE: no @jax.jit here - jitting an instance method traces
+    # `self` (not a pytree) and raises on every call.
     def compute_control(
         self,
         state: jnp.ndarray,
@@ -246,7 +247,8 @@ class ImpulsiveManeuverPlanner:
         self.min_time_between_burns = min_time_between_burns
         self.T_orbit = 2 * jnp.pi / n
     
-    @jax.jit
+    # NOTE: no @jax.jit here - jitting an instance method traces
+    # `self` (not a pytree) and raises on every call.
     def compute_tangential_burn(
         self,
         current_drift_rate: float,
@@ -278,7 +280,8 @@ class ImpulsiveManeuverPlanner:
         
         return dv
     
-    @jax.jit
+    # NOTE: no @jax.jit here - jitting an instance method traces
+    # `self` (not a pytree) and raises on every call.
     def compute_radial_burn_pair(
         self,
         current_position: float,
@@ -314,7 +317,8 @@ class ImpulsiveManeuverPlanner:
         
         return dv1, dv2
     
-    @jax.jit
+    # NOTE: no @jax.jit here - jitting an instance method traces
+    # `self` (not a pytree) and raises on every call.
     def compute_cross_track_burn(
         self,
         current_position: float,
