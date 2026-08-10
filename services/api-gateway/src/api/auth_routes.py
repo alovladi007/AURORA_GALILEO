@@ -65,19 +65,19 @@ class _UserStore:
                 self._redis = None
 
     def _key(self, email: str) -> str:
-        return f"galileo:users:{email.lower()}"
+        return f"galileo:users:{email.strip().lower()}"
 
     def get(self, email: str) -> Optional[Dict[str, Any]]:
         if self._redis is not None:
             raw = self._redis.get(self._key(email))
             return json.loads(raw) if raw else None
-        return self._memory.get(email.lower())
+        return self._memory.get(email.strip().lower())
 
     def put(self, email: str, record: Dict[str, Any]) -> None:
         if self._redis is not None:
             self._redis.set(self._key(email), json.dumps(record))
         else:
-            self._memory[email.lower()] = record
+            self._memory[email.strip().lower()] = record
 
 
 _store = _UserStore()
@@ -108,8 +108,8 @@ def register(body: RegisterRequest) -> Dict[str, Any]:
     roles = ["admin", "operator", "user"] if is_first else ["user"]
 
     record = {
-        "user_id": body.email.lower(),
-        "email": body.email.lower(),
+        "user_id": body.email.strip().lower(),
+        "email": body.email.strip().lower(),
         "full_name": body.full_name,
         "password_hash": _hash_password(body.password),
         "roles": roles,

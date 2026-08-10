@@ -150,7 +150,7 @@ export default function DashboardPage() {
           className="bg-gray-800 rounded p-6 space-y-3 max-w-sm mx-auto mt-24"
           onSubmit={(e) => {
             e.preventDefault();
-            login(email, password);
+            login(email.trim(), password);
           }}
         >
           <h2 className="font-semibold">Mission dashboard — sign in</h2>
