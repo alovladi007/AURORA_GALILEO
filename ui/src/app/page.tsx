@@ -198,9 +198,13 @@ export default function Home() {
       {/* hero */}
       <section className="max-w-6xl mx-auto px-6 pt-14 pb-12 grid lg:grid-cols-[1fr,360px] gap-12">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.2em] mb-5 text-[#93979d]">
-            A simulation platform of ATLAS Corporation
-          </p>
+          <a
+            href="https://alovladi007.github.io/ATLAS-Advanced-Technology-Labs-for-Applied-Sciences/"
+            target="_blank"
+            className="inline-block text-[11px] font-medium uppercase tracking-[0.2em] mb-5 text-[#93979d] hover:text-[#c2410c]"
+          >
+            A simulation platform of ATLAS Corporation ↗
+          </a>
           <h1 className="text-[2.6rem] leading-[1.1] font-bold tracking-tight">
             Gravity missions designed
             <br />
@@ -454,14 +458,31 @@ export default function Home() {
                 </a>
               </li>
               <li>
-                <span className={`${T.ink3} text-sm`}>
+                <a
+                  href="https://alovladi007.github.io/ATLAS-Advanced-Technology-Labs-for-Applied-Sciences/platform/aurora-nav/"
+                  target="_blank"
+                  className={T.ink2}
+                >
                   AURORA-NAV — subsea navigation
-                </span>
+                </a>
               </li>
               <li>
-                <span className={`${T.ink3} text-sm`}>
-                  GALILEO — satellite gravimetry
-                </span>
+                <a
+                  href="https://alovladi007.github.io/ATLAS-Advanced-Technology-Labs-for-Applied-Sciences/platform/aurora-galileo/"
+                  target="_blank"
+                  className={T.ink2}
+                >
+                  GALILEO on the ATLAS site
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://alovladi007.github.io/ATLAS-Advanced-Technology-Labs-for-Applied-Sciences/platform/"
+                  target="_blank"
+                  className={T.ink2}
+                >
+                  About the platforms
+                </a>
               </li>
             </ul>
           </div>
