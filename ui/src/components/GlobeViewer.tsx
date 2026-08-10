@@ -209,6 +209,11 @@ export default function GlobeViewer({
 
         viewerRef.current = viewer;
 
+        // Frame the full Earth regardless of container size
+        viewer.camera.setView({
+          destination: Cesium.Cartesian3.fromDegrees(-30.0, 20.0, 2.6e7),
+        });
+
         // Add click handler for location pinpointing
         const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
         handler.setInputAction((click: { position: Cesium.Cartesian2 }) => {
@@ -447,7 +452,10 @@ export default function GlobeViewer({
   }, [satellitePositions, gravityData, orbitTrajectories, formationSatellites, showOrbitPaths, showGroundTracks, currentTime, positionsToCartesian3, getGroundTrack, satelliteColors]);
 
   return (
-    <div className="relative w-full h-screen">
+    // Fill the parent container — pages decide the size. (This was
+    // h-screen, which clipped to half a globe inside fixed-height
+    // cards.)
+    <div className="relative w-full h-full min-h-[300px]">
       {/* Always render the viewer container so the ref is attached */}
       <div ref={viewerContainerRef} className="w-full h-full" />
 
