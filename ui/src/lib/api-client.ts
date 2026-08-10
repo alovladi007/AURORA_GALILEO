@@ -2,8 +2,8 @@ import axios from 'axios'
 import { getSession } from 'next-auth/react'
 
 // API Gateway URL - connects to microservices via gRPC
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:18000'
-const OPS_API_URL = process.env.NEXT_PUBLIC_OPS_API_URL || 'http://localhost:18000'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:28000'
+const OPS_API_URL = process.env.NEXT_PUBLIC_OPS_API_URL || 'http://localhost:28000'
 
 export const apiClient = axios.create({
   baseURL: API_URL,

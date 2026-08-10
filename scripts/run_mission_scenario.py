@@ -7,7 +7,7 @@ Run a GRACE-like mission scenario through the LIVE platform.
 
 Usage (stack must be up: docker compose up -d):
     python3 scripts/run_mission_scenario.py \
-        --gateway http://localhost:18000 --duration 5400
+        --gateway http://localhost:28000 --duration 5400
 
 The script registers/logs in a service account, ingests every
 telemetry and gravity record through the real API, queries them back,
@@ -54,7 +54,7 @@ def _get(url: str, token: str) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--gateway", default="http://localhost:18000")
+    ap.add_argument("--gateway", default="http://localhost:28000")
     ap.add_argument("--duration", type=float, default=5400.0)
     ap.add_argument("--dt", type=float, default=10.0)
     ap.add_argument("--batch", type=int, default=50)

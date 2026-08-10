@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const GATEWAY =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:18000';
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:28000';
 
 interface ModelGrid {
   model_id: string;

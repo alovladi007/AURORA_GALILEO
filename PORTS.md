@@ -24,7 +24,7 @@ All ports have been configured to avoid common conflicts.
 
 | Service | Internal Port | External Port | Protocol |
 |---------|--------------|---------------|----------|
-| API Gateway | 8000 | 18000 | HTTP/REST |
+| API Gateway | 8000 | 28000 | HTTP/REST |
 | Data Service | 50051 | 50051 | gRPC |
 | ML Service | 50052 | 50052 | gRPC |
 | Inversion Service | 50053 | 50053 | gRPC |

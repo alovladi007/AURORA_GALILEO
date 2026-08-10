@@ -50,7 +50,7 @@ Then open:
 | http://localhost:13003/gravity | Anomaly map — run live inversions |
 | http://localhost:13003/ops | Operations console |
 | http://localhost:13003/dashboard | Mission dashboard |
-| http://localhost:18000/docs | API gateway (OpenAPI) |
+| http://localhost:28000/docs | API gateway (OpenAPI) |
 | http://localhost:29091 | Grafana (admin/admin) |
 | http://localhost:29090 | Prometheus |
 | http://localhost:29500 | MLflow |

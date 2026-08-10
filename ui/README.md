@@ -11,7 +11,7 @@ npm install
 # Set up environment variables
 cp .env.local.example .env.local
 # Edit .env.local and configure:
-# - NEXT_PUBLIC_API_URL=http://localhost:18000 (API Gateway)
+# - NEXT_PUBLIC_API_URL=http://localhost:28000 (API Gateway)
 # - NEXT_PUBLIC_CESIUM_ION_TOKEN=your_token_here
 
 # Run development server
@@ -25,7 +25,7 @@ Visit http://localhost:13003 (alternative port to avoid conflicts)
 The UI connects to GALILEO's microservices through the API Gateway:
 
 ```
-UI (Next.js) → API Gateway (port 18000) → Microservices (gRPC)
+UI (Next.js) → API Gateway (port 28000) → Microservices (gRPC)
                                           ├─ Data Service
                                           ├─ ML Service
                                           ├─ Inversion Service
@@ -41,7 +41,7 @@ UI (Next.js) → API Gateway (port 18000) → Microservices (gRPC)
 - **ML Model Management**: Train, deploy, and monitor models
 - **Inversion Jobs**: Start and track gravity field inversions
 - **Satellite Control**: Send commands and monitor satellites
-- **API Integration**: Connects to microservices via API Gateway (port 18000)
+- **API Integration**: Connects to microservices via API Gateway (port 28000)
 
 ## Get Cesium Ion Token
 

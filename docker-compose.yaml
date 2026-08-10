@@ -24,7 +24,7 @@ services:
       dockerfile: services/api-gateway/Dockerfile
       network: host
     ports:
-      - "18000:8000"
+      - "28000:8000"
     environment:
       - SERVICE_NAME=api-gateway
       - DATA_SERVICE_ADDR=data-service:50051

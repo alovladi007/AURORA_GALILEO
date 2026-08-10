@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 const GATEWAY =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:18000';
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:28000';
 
 function useAuthToken() {
   const [token, setToken] = useState<string | null>(null);
