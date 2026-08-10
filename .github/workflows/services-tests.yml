@@ -39,17 +39,30 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install common test dependencies
+      # Service requirements FIRST (their pins are authoritative), then
+      # test-only deps without disturbing them. The old order installed
+      # unpinned numpy/grpcio first and service pins second with
+      # `|| true`, which could silently produce a mixed-ABI environment
+      # (numpy compiled-extension mismatches) that fails at import time.
+      - name: Install service dependencies (authoritative pins)
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-asyncio grpcio grpcio-tools protobuf \
-                      numpy sqlalchemy
-
-      - name: Install service dependencies
-        run: |
           if [ -f "services/${{ matrix.service }}/requirements.txt" ]; then
-            pip install -r "services/${{ matrix.service }}/requirements.txt" || true
+            pip install -r "services/${{ matrix.service }}/requirements.txt"
           fi
+
+      - name: Install test dependencies
+        run: |
+          # grpcio-tools must match the service's pinned grpcio, or pip
+          # silently upgrades grpcio and breaks the pin.
+          GRPC_VER=$(python -c "import grpc; print(grpc.__version__)" 2>/dev/null || echo "")
+          if [ -n "$GRPC_VER" ]; then
+            pip install "grpcio-tools==$GRPC_VER"
+          else
+            pip install grpcio grpcio-tools
+          fi
+          pip install pytest pytest-asyncio sqlalchemy numpy protobuf
+          pip check
 
       - name: Generate protobuf stubs
         run: |
