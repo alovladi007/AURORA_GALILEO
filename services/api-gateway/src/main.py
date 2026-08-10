@@ -372,7 +372,7 @@ async def train_model(
             # Check permission
             if not PermissionChecker.has_permission(
                 user_context.roles,
-                Permission.MODEL_TRAIN
+                Permission.TRAIN_MODEL
             ):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -456,7 +456,7 @@ async def start_inversion(
             # Check permission
             if not PermissionChecker.has_permission(
                 user_context.roles,
-                Permission.INVERSION_RUN
+                Permission.START_INVERSION
             ):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -466,16 +466,33 @@ async def start_inversion(
             grpc_request = inversion_service_pb2.StartInversionRequest(
                 name=inversion_request["name"],
                 description=inversion_request.get("description", ""),
-                measurement_ids=inversion_request["measurement_ids"],
+                measurement_ids=inversion_request.get("measurement_ids", []),
                 user_context=user_context,
             )
+            params = inversion_request.get("parameters") or {}
+            grpc_request.parameters.method = params.get("method", "tikhonov")
+            grpc_request.parameters.max_iterations = int(params.get("max_iterations", 50))
+            grpc_request.parameters.regularization_lambda = float(
+                params.get("regularization_lambda", 0.0))
+            grid = inversion_request.get("grid") or {}
+            if grid:
+                grpc_request.grid.min_latitude = float(grid.get("min_latitude", -90))
+                grpc_request.grid.max_latitude = float(grid.get("max_latitude", 90))
+                grpc_request.grid.min_longitude = float(grid.get("min_longitude", -180))
+                grpc_request.grid.max_longitude = float(grid.get("max_longitude", 180))
+                grpc_request.grid.num_lat_points = int(grid.get("num_lat_points", 12))
+                grpc_request.grid.num_lon_points = int(grid.get("num_lon_points", 12))
 
             response = await grpc_manager.stubs["inversion"].StartInversion(grpc_request)
 
             return {
                 "job_id": response.job_id,
                 "status": response.status,
-                "estimated_completion": response.estimated_completion,
+                # protobuf Timestamp is not JSON-serializable directly
+                "estimated_completion": (
+                    response.estimated_completion.ToJsonString()
+                    if response.HasField("estimated_completion") else None
+                ),
                 "trace_id": get_current_trace_id(),
             }
 
@@ -575,7 +592,7 @@ async def send_command(
             # Check permission
             if not PermissionChecker.has_permission(
                 user_context.roles,
-                Permission.SATELLITE_CONTROL
+                Permission.CONTROL_SATELLITE
             ):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,

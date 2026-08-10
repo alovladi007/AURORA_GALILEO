@@ -49,15 +49,20 @@ class InversionServicer(inversion_service_pb2_grpc.InversionServiceServicer):
             if data_query:
                 fetched = self.fetcher.fetch_grid(data_query)
                 if fetched is not None:
-                    observed, _counts, grid_shape = fetched
-                    logger.info("Using real gravity data (%d cells) for inversion",
-                                observed.size)
+                    observed, counts, grid_shape = fetched
+                    logger.info(
+                        "Using real gravity data for inversion: %d/%d cells populated",
+                        int((counts > 0).sum()), observed.size)
                 else:
+                    counts = None
                     logger.info("No real data available; using synthetic problem")
+            else:
+                counts = None
 
             job = self.engine.start(
                 request.inversion_type, dict(request.config),
                 observed_data=observed, grid_shape=grid_shape,
+                cell_counts=counts,
             )
             self.store.upsert(job)
 
@@ -81,33 +86,96 @@ class InversionServicer(inversion_service_pb2_grpc.InversionServiceServicer):
                 estimated_time=0.0,
             )
 
+    def StartInversion(self, request, context):
+        """Proto-first entry point (used by the API gateway): fetch the
+        requested gravity measurements from the Data Service and invert
+        them with the honest masked-gridding path. measurement_ids are
+        interpreted as satellite IDs to select (empty = all)."""
+        try:
+            grid = request.grid
+            rows = grid.num_lat_points or 12
+            cols = grid.num_lon_points or 12
+            data_query = {
+                "satellite_ids": ",".join(request.measurement_ids),
+                "grid_rows": str(rows),
+                "grid_cols": str(cols),
+            }
+            if grid.max_latitude or grid.min_latitude:
+                data_query.update({
+                    "min_latitude": str(grid.min_latitude),
+                    "max_latitude": str(grid.max_latitude),
+                    "min_longitude": str(grid.min_longitude),
+                    "max_longitude": str(grid.max_longitude),
+                })
+
+            observed = counts = grid_shape = None
+            fetched = self.fetcher.fetch_grid(data_query)
+            if fetched is not None:
+                observed, counts, grid_shape = fetched
+                logger.info(
+                    "StartInversion '%s': %d/%d cells populated",
+                    request.name, int((counts > 0).sum()), observed.size)
+            else:
+                context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
+                context.set_details(
+                    "no gravity measurements available for the requested "
+                    "satellites/region")
+                return inversion_service_pb2.StartInversionResponse()
+
+            method = request.parameters.method or "tikhonov"
+            config = {"grid_rows": str(rows), "grid_cols": str(cols)}
+            if request.parameters.max_iterations:
+                config["max_iterations"] = str(request.parameters.max_iterations)
+
+            job = self.engine.start(
+                method, config,
+                observed_data=observed, grid_shape=grid_shape,
+                cell_counts=counts,
+            )
+            self.store.upsert(job)
+
+            resp = inversion_service_pb2.StartInversionResponse(
+                job_id=job.job_id, status=job.status)
+            return resp
+        except Exception as e:  # noqa: BLE001
+            logger.exception("StartInversion failed")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return inversion_service_pb2.StartInversionResponse()
+
     def GetInversionStatus(self, request, context):
-        """Get real-time status of an inversion job."""
+        """Get real-time status of an inversion job.
+
+        NOTE: the proto contract for this RPC is
+        GetInversionStatusResponse{job: InversionJob} — the previous
+        implementation returned the legacy InversionStatusResponse,
+        which failed wire deserialization on every call.
+        """
         try:
             job = self.engine.get(request.job_id)
             if not job:
-                return inversion_service_pb2.InversionStatusResponse(
-                    job_id=request.job_id,
-                    status="not_found",
-                    progress=0.0,
-                    message="Inversion job not found",
-                )
+                context.set_code(grpc.StatusCode.NOT_FOUND)
+                context.set_details(f"Inversion job {request.job_id} not found")
+                return inversion_service_pb2.GetInversionStatusResponse()
 
-            return inversion_service_pb2.InversionStatusResponse(
+            pj = inversion_service_pb2.InversionJob(
                 job_id=job.job_id,
                 status=job.status,
-                progress=job.progress,
-                current_iteration=job.current_iteration,
-                total_iterations=job.total_iterations,
-                residual=job.residual,
-                message=job.message,
+                progress=float(job.progress),
+                rms_residual=float(job.residual or 0.0),
+                error_message=job.error or "",
             )
+            if getattr(job, "created_at", None):
+                pj.created_at.CopyFrom(datetime_to_timestamp(job.created_at))
+            if getattr(job, "completed_at", None):
+                pj.completed_at.CopyFrom(datetime_to_timestamp(job.completed_at))
+            return inversion_service_pb2.GetInversionStatusResponse(job=pj)
 
         except Exception as e:
             logger.error("Error getting inversion status: %s", e)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
-            return inversion_service_pb2.InversionStatusResponse()
+            return inversion_service_pb2.GetInversionStatusResponse()
 
     def GetInversionResult(self, request, context):
         """Get inversion results, serializing artifacts on first completion."""

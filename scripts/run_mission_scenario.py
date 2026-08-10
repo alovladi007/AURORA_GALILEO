@@ -126,6 +126,30 @@ def main() -> int:
     assert od["converged"], "orbit determination did not converge"
     assert od["epoch_position_error_m"] < 10.0, "OD recovery worse than 10 m"
 
+    print("=== 7/7 gravity inversion on the ingested measurements ===")
+    import time as _time
+    start = _post(f"{gw}/api/v1/inversions", {
+        "name": "mission-anomaly-map",
+        "measurement_ids": list(scenario.config.satellite_ids),
+        "parameters": {"method": "tikhonov"},
+        "grid": {
+            "min_latitude": -85, "max_latitude": 85,
+            "min_longitude": -180, "max_longitude": 180,
+            "num_lat_points": 16, "num_lon_points": 16,
+        },
+    }, token)
+    job_id = start["job_id"]
+    status = {}
+    for _ in range(20):
+        _time.sleep(3)
+        status = _get(f"{gw}/api/v1/inversions/{job_id}", token)
+        if status.get("status") in ("completed", "failed"):
+            break
+    assert status.get("status") == "completed", f"inversion: {status}"
+    print(f"    job {job_id}: completed, "
+          f"progress={status['progress']:.0%}, "
+          f"residual={status['rms_residual']:.1f}")
+
     print("\nMISSION SCENARIO PIPELINE: ALL STAGES PASSED")
     return 0
 

@@ -13,14 +13,16 @@ from src.gen import inversion_service_pb2, common_pb2
 
 
 def _wait_complete(servicer, context, job_id, timeout=15.0):
+    # Proto contract: GetInversionStatusResponse{job: InversionJob}
     start = time.time()
     while time.time() - start < timeout:
-        status = servicer.GetInversionStatus(
-            inversion_service_pb2.InversionStatusRequest(job_id=job_id), context)
-        if status.status in ("completed", "failed", "cancelled"):
-            return status
+        resp = servicer.GetInversionStatus(
+            inversion_service_pb2.GetInversionStatusRequest(job_id=job_id),
+            context)
+        if resp.job.status in ("completed", "failed", "cancelled"):
+            return resp.job
         time.sleep(0.1)
-    return status
+    return resp.job
 
 
 class TestRunInversion:
@@ -54,11 +56,13 @@ class TestRunInversion:
         assert result.inversion_type == "tikhonov"
 
     def test_status_not_found(self, servicer, context):
-        status = servicer.GetInversionStatus(
-            inversion_service_pb2.InversionStatusRequest(job_id="does_not_exist"),
+        servicer.GetInversionStatus(
+            inversion_service_pb2.GetInversionStatusRequest(
+                job_id="does_not_exist"),
             context,
         )
-        assert status.status == "not_found"
+        import grpc
+        assert context.code == grpc.StatusCode.NOT_FOUND
 
     def test_list_inversions(self, servicer, context):
         servicer.RunInversion(

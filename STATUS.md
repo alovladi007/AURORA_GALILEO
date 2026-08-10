@@ -94,6 +94,21 @@ epoch state recovered to 0.30 m / 0.30 mm/s, post-fit RMS 1.6 m
 (the injected 1 m noise floor). 7 new acceptance tests in
 tests/mission/.
 
+**Phase 3 W3.3 (inversion consumes real data), verified live:** the
+inversion engine's observed-data path now uses an honest observation
+operator (selection of populated grid cells + Laplacian completion)
+instead of the RNG point-mass kernel, with 3 acceptance tests proving
+>0.95 recovery correlation on track-sampled fields and honest failure
+on empty data. StartInversion implemented in the servicer (the gateway
+called an RPC that did not exist); GetInversionStatus now returns the
+proto-declared GetInversionStatusResponse (the legacy message failed
+wire deserialization on every call). RBAC is now enforced (the old
+checker returned True unconditionally) and three phantom Permission
+members fixed. Verified live end-to-end: 172 ingested mission
+measurements fetched via gRPC, binned to a 16x16 grid (29 ground-track
+cells), inverted, and polled to completion through the gateway.
+Mission script now runs all 7 stages.
+
 **Gate 0 (2026-08-09, verified on a live Docker stack):** 14/14
 containers healthy from the canonical `docker-compose.yaml`; gateway
 /health reports all four gRPC services connected; register -> JWT

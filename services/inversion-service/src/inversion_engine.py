@@ -265,6 +265,9 @@ class InversionJob:
     # Real observed gravity data (gridded mGal). When set, the inversion runs
     # on these observations instead of the synthetic forward problem.
     observed_data: Optional[np.ndarray] = None
+    # Per-cell measurement counts from the fetcher; cells with zero
+    # counts are unobserved and excluded from the data misfit.
+    cell_counts: Optional[np.ndarray] = None
     data_source: str = "synthetic"
 
 
@@ -284,7 +287,8 @@ class InversionEngine:
     # -- public API --------------------------------------------------------
     def start(self, inversion_type: str, config: Dict[str, str],
               observed_data: Optional[np.ndarray] = None,
-              grid_shape: Optional[tuple[int, int]] = None) -> InversionJob:
+              grid_shape: Optional[tuple[int, int]] = None,
+              cell_counts: Optional[np.ndarray] = None) -> InversionJob:
         job_id = f"inv_{datetime.utcnow().timestamp()}"
         job = InversionJob(
             job_id=job_id,
@@ -293,6 +297,8 @@ class InversionEngine:
         )
         if observed_data is not None:
             job.observed_data = np.asarray(observed_data, dtype=float)
+            job.cell_counts = (np.asarray(cell_counts, dtype=float)
+                               if cell_counts is not None else None)
             job.data_source = "data_service"
             if grid_shape is not None:
                 job.config.setdefault("grid_rows", str(grid_shape[0]))
@@ -341,12 +347,24 @@ class InversionEngine:
             L = laplacian_regularizer((n_rows, n_cols))
 
             if job.observed_data is not None:
-                # Real data path: observations live on the model grid, so use a
-                # square operator mapping density -> gridded gravity response.
+                # Real data path: measurements were binned onto grid
+                # cells by the fetcher. The observation operator is the
+                # SELECTION of populated cells (no fabricated random
+                # kernel), and Tikhonov+Laplacian completes the map
+                # smoothly across unobserved cells:
+                #   min ||S m - d||^2 + lambda^2 ||L m||^2
                 job.message = "Inverting observed gravity data"
-                data = job.observed_data.ravel()
-                n_obs = data.size
-                G = build_point_mass_operator((n_rows, n_cols), n_obs, rng=rng)
+                full = job.observed_data.ravel()
+                counts = (job.cell_counts.ravel()
+                          if getattr(job, "cell_counts", None) is not None
+                          else np.ones_like(full))
+                mask = counts > 0
+                if not np.any(mask):
+                    raise ValueError("no populated grid cells in observations")
+                data = full[mask]
+                n_obs = int(mask.sum())
+                G = np.zeros((n_obs, n_rows * n_cols))
+                G[np.arange(n_obs), np.flatnonzero(mask)] = 1.0
                 true_model = None
             else:
                 # Synthetic path: known "true" model for validation.

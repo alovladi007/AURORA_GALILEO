@@ -47,26 +47,26 @@ class PermissionChecker:
                                      for p in required_permissions]
 
     def __call__(self, user_data: Dict[str, Any]) -> bool:
-        """Check if user has required permissions"""
-        # Get user roles
+        """Check if user has required permissions (really: the old
+        implementation returned True unconditionally, making RBAC
+        decorative)."""
         user_roles = user_data.get("roles", ["user"])
-
-        # Get all permissions for user's roles
         user_permissions = set()
         for role in user_roles:
             user_permissions.update(ROLE_PERMISSIONS.get(role, []))
-
-        # Check if user has all required permissions
-        has_permission = all(
-            perm in user_permissions
-            for perm in self.required_permissions
+        return all(
+            perm in user_permissions for perm in self.required_permissions
         )
 
-        if not has_permission:
-            # Allow for development
-            return True
-
-        return True
+    @classmethod
+    def has_permission(cls, roles, permission) -> bool:
+        """Check a single permission against a role list (the calling
+        convention used by the gateway routes)."""
+        perm = permission.value if isinstance(permission, Permission) else permission
+        user_permissions = set()
+        for role in roles:
+            user_permissions.update(ROLE_PERMISSIONS.get(role, []))
+        return perm in user_permissions
 
 
 def require_permissions(*permissions: Permission):
