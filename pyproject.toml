@@ -54,7 +54,7 @@ control = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["sim*", "sensing*", "inversion*", "control*", "ml*", "pod*", "gtime*", "telemetry*", "emulator*", "geophysics*", "fusion*", "hil*"]
+include = ["sim*", "sensing*", "inversion*", "control*", "ml*", "pod*", "gtime*", "telemetry*", "emulator*", "geophysics*", "fusion*", "hil*", "mission*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

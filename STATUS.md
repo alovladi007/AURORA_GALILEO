@@ -82,6 +82,18 @@ circuit_breaker_state, exporter pg_up/redis_up). Verified live: all 4
 Prometheus scrape targets UP, 5 rules loaded and healthy, pg_up=1.
 Target/rule sanity now runs in the Gate 0 CI job.
 
+**Phase 3 W3.1 (first end-to-end mission pipeline), verified live:**
+`scripts/run_mission_scenario.py` generates a GRACE-like two-satellite
+formation with the validated two-body+J2 dynamics, synthesizes
+telemetry and gravity observables from the real degree-6 spherical-
+harmonic field (values match the analytic J2 anchors to 5%), ingests
+everything through the authenticated gateway -> gRPC -> TimescaleDB
+path (364 records), queries it back with provenance tags intact, and
+runs dynamic orbit determination on the ingested telemetry:
+epoch state recovered to 0.30 m / 0.30 mm/s, post-fit RMS 1.6 m
+(the injected 1 m noise floor). 7 new acceptance tests in
+tests/mission/.
+
 **Gate 0 (2026-08-09, verified on a live Docker stack):** 14/14
 containers healthy from the canonical `docker-compose.yaml`; gateway
 /health reports all four gRPC services connected; register -> JWT
@@ -119,9 +131,8 @@ In progress / next (see master prompt for full list):
 ## Test Baseline (repo-root suite, 2026-07-17)
 
 ```
-Root suite: 298 passed, 0 failed (csrf/circuit-breaker tests moved
-into the gateway suite). Service suites: data 10, ml 16, control 14,
-inversion 22, gateway 35 — all passing.
+Root suite: 305 passed, 0 failed. Service suites: data 10, ml 16,
+control 14, inversion 22, gateway 35 — all passing.
 ```
 
 All 17 previously-failing tests are fixed by real implementations (see
