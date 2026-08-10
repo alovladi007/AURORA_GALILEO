@@ -9,70 +9,23 @@
  * event orchestrator. Failures render as failures.
  */
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-
-const GATEWAY =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:28000';
-
-function useAuthToken() {
-  const [token, setToken] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const login = useCallback(async (email: string, password: string) => {
-    setError(null);
-    const resp = await fetch(`${GATEWAY}/auth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!resp.ok) {
-      setError(`Login failed (${resp.status})`);
-      return;
-    }
-    setToken((await resp.json()).access_token);
-  }, []);
-  return { token, error, login };
-}
-
-function Panel({
-  title,
-  error,
-  children,
-}: {
-  title: string;
-  error?: string | null;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="bg-gray-800 rounded p-4">
-      <h2 className="font-semibold mb-3">{title}</h2>
-      {error ? (
-        <div className="bg-red-900/40 border border-red-600 rounded p-2 text-sm">
-          {error}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  );
-}
-
-const HealthDot = ({ ok }: { ok: boolean }) => (
-  <span
-    className={`inline-block w-2.5 h-2.5 rounded-full mr-2 ${
-      ok ? 'bg-green-500' : 'bg-red-500'
-    }`}
-  />
-);
+import {
+  Card,
+  GATEWAY,
+  Icon,
+  ICONS,
+  okPill,
+  PageHeader,
+  SignIn,
+  StatusPill,
+  T,
+  useAuthToken,
+} from '@/lib/console-ui';
 
 export default function OpsPage() {
   const { token, error: authError, login } = useAuthToken();
-  // Dev-only convenience: prefill the documented dev account so local
-  // sign-in is one click. Production builds get empty fields.
-  const isDev = process.env.NODE_ENV === 'development';
-  const [email, setEmail] = useState(isDev ? 'mission-sim@galileo.dev' : '');
-  const [password, setPassword] = useState(
-    isDev ? 'mission-scenario-2026' : ''
-  );
 
   const [health, setHealth] = useState<any>(null);
   const [healthErr, setHealthErr] = useState<string | null>(null);
@@ -95,11 +48,10 @@ export default function OpsPage() {
 
   const refresh = useCallback(async () => {
     if (!token) return;
-    // Health (unauthenticated endpoint, but fetch uniformly)
     try {
       const r = await fetch(`${GATEWAY}/health`);
       r.ok
-        ? setHealth(await r.json())
+        ? (setHealth(await r.json()), setHealthErr(null))
         : setHealthErr(`health ${r.status}`);
     } catch (e: any) {
       setHealthErr(String(e));
@@ -144,161 +96,172 @@ export default function OpsPage() {
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-gray-900 text-gray-100 p-8">
-        <form
-          className="bg-gray-800 rounded p-6 space-y-3 max-w-sm mx-auto mt-24"
-          onSubmit={(e) => {
-            e.preventDefault();
-            login(email.trim(), password);
-          }}
-        >
-          <h2 className="font-semibold">Operations console — sign in</h2>
-          <input
-            className="w-full rounded bg-gray-700 px-3 py-2"
-            placeholder="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <input
-            className="w-full rounded bg-gray-700 px-3 py-2"
-            type="password"
-            placeholder="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <button className="w-full bg-blue-600 hover:bg-blue-700 rounded py-2">
-            Sign in
-          </button>
-          {authError && <p className="text-red-400 text-sm">{authError}</p>}
-        </form>
-      </div>
+      <SignIn
+        subtitle="operations console"
+        onLogin={login}
+        error={authError}
+      />
     );
   }
 
   const activeAlerts = alerts?.alerts ?? [];
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Operations Console</h1>
-          <button
-            onClick={refresh}
-            className="bg-gray-700 hover:bg-gray-600 rounded px-4 py-2 text-sm"
-          >
-            Refresh
-          </button>
-        </div>
+    <div className={`min-h-screen ${T.app} ${T.ink}`}>
+      <PageHeader
+        title="Operations Console"
+        badge={
+          activeAlerts.length > 0 ? (
+            <StatusPill
+              kind="serious"
+              label={`${activeAlerts.length} active alert${
+                activeAlerts.length > 1 ? 's' : ''
+              }`}
+            />
+          ) : health ? (
+            <StatusPill kind="good" label="all systems nominal" />
+          ) : undefined
+        }
+        actions={
+          <>
+            <Link href="/dashboard" className={T.btnGhost}>
+              <Icon d={ICONS.back} size={14} /> Mission Control
+            </Link>
+            <button onClick={refresh} className={T.btnGhost}>
+              <Icon d={ICONS.refresh} size={14} /> Refresh
+            </button>
+          </>
+        }
+      />
 
+      <div className="px-8 py-6 max-w-6xl space-y-6">
         {activeAlerts.length > 0 && (
-          <div className="bg-red-900/40 border border-red-600 rounded p-4">
-            <h2 className="font-semibold text-red-300 mb-2">
-              {activeAlerts.length} active alert
-              {activeAlerts.length > 1 ? 's' : ''}
-            </h2>
+          <Card title="Active alerts" sub="Alertmanager, live">
             {activeAlerts.map((a: any, i: number) => (
-              <div key={i} className="text-sm">
-                <span className="font-mono">{a.name}</span>
-                {a.severity && (
-                  <span className="ml-2 text-xs uppercase text-red-400">
-                    {a.severity}
-                  </span>
-                )}
-                <span className="ml-2 text-gray-300">{a.summary}</span>
+              <div key={i} className="flex items-center gap-3 text-sm mb-2">
+                <StatusPill
+                  kind={a.severity === 'critical' ? 'critical' : 'serious'}
+                  label={a.name}
+                />
+                <span className={T.ink2}>{a.summary}</span>
               </div>
             ))}
-          </div>
+          </Card>
         )}
 
         <div className="grid md:grid-cols-2 gap-6">
-          <Panel title="Service health (gateway gRPC checks)" error={healthErr}>
+          <Card
+            title="Service health"
+            sub="gateway gRPC checks"
+            error={healthErr}
+          >
             {health ? (
-              <ul className="space-y-1 text-sm">
-                <li>
-                  <HealthDot ok={health.status === 'healthy'} />
-                  gateway: {health.status}
+              <ul className="space-y-2.5 text-sm">
+                <li className="flex items-center justify-between">
+                  <span className={T.ink2}>api-gateway</span>
+                  {okPill(health.status === 'healthy', health.status)}
                 </li>
                 {Object.entries(health.services || {}).map(([k, v]) => (
-                  <li key={k}>
-                    <HealthDot
-                      ok={v === 'healthy' || v === 'connected'}
-                    />
-                    {k}: {String(v).slice(0, 60)}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-gray-400">loading…</p>
-            )}
-          </Panel>
-
-          <Panel
-            title={`Monitoring targets ${
-              targets ? `(${targets.up}/${targets.total} up)` : ''
-            }`}
-            error={targetsErr}
-          >
-            {targets && (
-              <ul className="space-y-1 text-sm">
-                {targets.targets.map((t: any, i: number) => (
-                  <li key={i}>
-                    <HealthDot ok={t.health === 'up'} />
-                    {t.job}{' '}
-                    <span className="text-gray-500 text-xs">
-                      {t.instance}
-                    </span>
-                    {t.last_error && (
-                      <span className="text-red-400 text-xs ml-2">
-                        {t.last_error}
-                      </span>
+                  <li key={k} className="flex items-center justify-between">
+                    <span className={T.ink2}>{k}-service</span>
+                    {okPill(
+                      v === 'healthy' || v === 'connected',
+                      String(v),
+                      String(v).slice(0, 24)
                     )}
                   </li>
                 ))}
               </ul>
+            ) : (
+              <p className={`text-sm ${T.ink3}`}>loading…</p>
             )}
-          </Panel>
+          </Card>
 
-          <Panel title="Alert rules" error={alertsErr}>
-            {rules ? (
-              <ul className="space-y-1 text-sm">
-                {rules.rules.map((r: any, i: number) => (
-                  <li key={i}>
-                    <HealthDot ok={r.state !== 'firing'} />
-                    {r.name}
-                    <span className="text-gray-500 text-xs ml-2">
-                      {r.group} · {r.state}
+          <Card
+            title={`Monitoring targets${
+              targets ? ` — ${targets.up}/${targets.total} up` : ''
+            }`}
+            sub="Prometheus scrape state"
+            error={targetsErr}
+          >
+            {targets && (
+              <ul className="space-y-2.5 text-sm">
+                {targets.targets.map((t: any, i: number) => (
+                  <li key={i} className="flex items-center justify-between">
+                    <span>
+                      <span className={T.ink}>{t.job}</span>{' '}
+                      <span className={`text-xs ${T.ink3}`}>
+                        {t.instance}
+                      </span>
+                      {t.last_error && (
+                        <span
+                          className="text-xs ml-2"
+                          style={{ color: '#ec835a' }}
+                        >
+                          {t.last_error}
+                        </span>
+                      )}
                     </span>
+                    {okPill(t.health === 'up', 'up', 'down')}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <Card
+            title="Alert rules"
+            sub="Prometheus evaluation state"
+            error={alertsErr}
+          >
+            {rules ? (
+              <ul className="space-y-2.5 text-sm">
+                {rules.rules.map((r: any, i: number) => (
+                  <li key={i} className="flex items-center justify-between">
+                    <span>
+                      <span className={T.ink}>{r.name}</span>{' '}
+                      <span className={`text-xs ${T.ink3}`}>{r.group}</span>
+                    </span>
+                    {r.state === 'firing' ? (
+                      <StatusPill kind="serious" label="firing" />
+                    ) : (
+                      <StatusPill kind="good" label={r.state || 'ok'} />
+                    )}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-gray-400">loading…</p>
+              <p className={`text-sm ${T.ink3}`}>loading…</p>
             )}
-          </Panel>
+          </Card>
 
-          <Panel title="Workflow engine" error={workflowsErr}>
+          <Card
+            title="Workflow engine"
+            sub={`${executions.length} recorded execution${
+              executions.length === 1 ? '' : 's'
+            }`}
+            error={workflowsErr}
+          >
             {workflows ? (
-              <>
-                <ul className="space-y-1 text-sm mb-3">
-                  {(workflows.workflows || []).map((w: any) => (
-                    <li key={w.name}>
-                      <HealthDot ok={w.enabled} />
-                      <span className="font-mono">{w.name}</span>
-                      <span className="text-gray-500 text-xs ml-2">
-                        on {w.trigger_event} · {w.steps?.length ?? 0} steps
+              <ul className="space-y-3 text-sm">
+                {(workflows.workflows || []).map((w: any) => (
+                  <li key={w.name}>
+                    <div className="flex items-center gap-3">
+                      {okPill(w.enabled, 'enabled', 'disabled')}
+                      <span className={`font-mono text-xs ${T.ink}`}>
+                        {w.name}
                       </span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-xs text-gray-400">
-                  {executions.length} recorded execution
-                  {executions.length === 1 ? '' : 's'}
-                </p>
-              </>
+                    </div>
+                    <p className={`text-xs mt-1 ${T.ink3}`}>
+                      on {w.trigger_event} · {w.steps?.length ?? 0} steps
+                    </p>
+                  </li>
+                ))}
+              </ul>
             ) : (
-              <p className="text-sm text-gray-400">loading…</p>
+              <p className={`text-sm ${T.ink3}`}>loading…</p>
             )}
-          </Panel>
+          </Card>
         </div>
       </div>
     </div>

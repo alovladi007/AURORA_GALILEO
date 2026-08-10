@@ -1,19 +1,30 @@
 'use client';
 
 /**
- * Gravity anomaly map — the platform's first end-to-end product view.
+ * Gravity anomaly map — the platform's flagship product view.
  *
- * Every number on this page comes from the backend: login issues a real
- * JWT, the job list is the inversion service's state, and the map is
- * the georeferenced model grid returned by
- * GET /api/v1/inversions/{id}/model. Errors render as errors — there
- * are no client-side fallbacks.
+ * Every number comes from the backend: login issues a real JWT, the
+ * job list is the inversion service's state, and the map is the
+ * georeferenced model grid from GET /api/v1/inversions/{id}/model.
+ * Errors render as errors — there are no client-side fallbacks.
  */
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-
-const GATEWAY =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:28000';
+import {
+  Card,
+  ErrorNote,
+  GATEWAY,
+  Icon,
+  ICONS,
+  jobStatusPill,
+  PageHeader,
+  SignIn,
+  StatusPill,
+  T,
+  Th,
+  useAuthToken,
+} from '@/lib/console-ui';
 
 interface ModelGrid {
   model_id: string;
@@ -29,26 +40,6 @@ interface ModelGrid {
     num_lat_points: number;
     num_lon_points: number;
   };
-}
-
-function useAuthToken() {
-  const [token, setToken] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const login = useCallback(async (email: string, password: string) => {
-    setError(null);
-    const resp = await fetch(`${GATEWAY}/auth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!resp.ok) {
-      setError(`Login failed (${resp.status})`);
-      return;
-    }
-    const body = await resp.json();
-    setToken(body.access_token);
-  }, []);
-  return { token, error, login };
 }
 
 function AnomalyMap({ model }: { model: ModelGrid }) {
@@ -90,17 +81,19 @@ function AnomalyMap({ model }: { model: ModelGrid }) {
         ref={canvasRef}
         width={640}
         height={320}
-        className="w-full border border-gray-600 rounded"
+        className="w-full rounded-lg border border-[#1c2537]"
       />
-      <div className="flex justify-between text-xs text-gray-400 mt-1">
+      <div
+        className={`flex justify-between text-xs mt-2 ${T.ink3}`}
+      >
         <span>
           lat [{g.min_latitude}°, {g.max_latitude}°] · lon [
           {g.min_longitude}°, {g.max_longitude}°]
         </span>
         {model.statistics && (
-          <span>
-            {model.statistics.min?.toFixed(1)} … {' '}
-            {model.statistics.max?.toFixed(1)} mGal
+          <span className="tabular-nums">
+            {model.statistics.min?.toFixed(1)} …{' '}
+            {model.statistics.max?.toFixed(1)} mGal · blue low → red high
           </span>
         )}
       </div>
@@ -110,13 +103,6 @@ function AnomalyMap({ model }: { model: ModelGrid }) {
 
 export default function GravityPage() {
   const { token, error: authError, login } = useAuthToken();
-  // Dev-only convenience: prefill the documented dev account so local
-  // sign-in is one click. Production builds get empty fields.
-  const isDev = process.env.NODE_ENV === 'development';
-  const [email, setEmail] = useState(isDev ? 'mission-sim@galileo.dev' : '');
-  const [password, setPassword] = useState(
-    isDev ? 'mission-scenario-2026' : ''
-  );
   const [jobs, setJobs] = useState<any[]>([]);
   const [model, setModel] = useState<ModelGrid | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -179,10 +165,11 @@ export default function GravityPage() {
         return;
       }
       const { job_id } = await resp.json();
-      // poll to completion
       for (let i = 0; i < 20; i++) {
         await new Promise((r) => setTimeout(r, 2000));
-        const st = await (await authed(`/api/v1/inversions/${job_id}`)).json();
+        const st = await (
+          await authed(`/api/v1/inversions/${job_id}`)
+        ).json();
         if (st.status === 'completed') {
           await loadModel(job_id);
           await refreshJobs();
@@ -210,135 +197,137 @@ export default function GravityPage() {
     setModel(body.model);
   };
 
+  if (!token) {
+    return (
+      <SignIn
+        subtitle="gravity anomaly map"
+        onLogin={login}
+        error={authError}
+      />
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <h1 className="text-2xl font-bold">
-          Gravity Anomaly Map
-          <span className="ml-3 text-sm font-normal text-gray-400">
-            live inversion products · no fabricated data
-          </span>
-        </h1>
-
-        {!token ? (
-          <form
-            className="bg-gray-800 rounded p-6 space-y-3 max-w-sm"
-            onSubmit={(e) => {
-              e.preventDefault();
-              login(email.trim(), password);
-            }}
-          >
-            <h2 className="font-semibold">Sign in</h2>
-            <input
-              className="w-full rounded bg-gray-700 px-3 py-2"
-              placeholder="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <input
-              className="w-full rounded bg-gray-700 px-3 py-2"
-              type="password"
-              placeholder="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <button
-              className="w-full bg-blue-600 hover:bg-blue-700 rounded py-2"
-              type="submit"
-            >
-              Get token
-            </button>
-            {authError && <p className="text-red-400 text-sm">{authError}</p>}
-          </form>
-        ) : (
+    <div className={`min-h-screen ${T.app} ${T.ink}`}>
+      <PageHeader
+        title="Gravity Anomaly Map"
+        badge={
+          <StatusPill kind="good" label="live inversion products" />
+        }
+        actions={
           <>
-            <div className="flex items-center gap-4">
-              <select
-                value={method}
-                onChange={(e) =>
-                  setMethod(e.target.value as 'tikhonov' | 'ml_completion')
-                }
-                className="bg-gray-700 rounded px-3 py-2"
-              >
-                <option value="tikhonov">Tikhonov (classical)</option>
-                <option value="ml_completion">
-                  ML completion (beat baseline by 47%)
-                </option>
-              </select>
-              <button
-                onClick={runInversion}
-                disabled={busy}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded px-4 py-2"
-              >
-                {busy ? 'Inverting…' : 'Run inversion on mission data'}
-              </button>
-              <button
-                onClick={refreshJobs}
-                className="bg-gray-700 hover:bg-gray-600 rounded px-4 py-2"
-              >
-                Refresh jobs
-              </button>
-            </div>
-
-            {error && (
-              <div className="bg-red-900/40 border border-red-600 rounded p-3 text-sm">
-                {error}
-              </div>
-            )}
-
-            {model && (
-              <div className="bg-gray-800 rounded p-4">
-                <h2 className="font-semibold mb-2">
-                  {model.model_id}
-                  <span className="ml-2 text-xs text-gray-400">
-                    rms residual {model.rms_residual?.toFixed(1)}
-                  </span>
-                </h2>
-                <AnomalyMap model={model} />
-              </div>
-            )}
-
-            <div className="bg-gray-800 rounded p-4">
-              <h2 className="font-semibold mb-2">Inversion jobs</h2>
-              {jobs.length === 0 ? (
-                <p className="text-sm text-gray-400">
-                  No jobs yet — run an inversion, or ingest mission data
-                  first (scripts/run_mission_scenario.py).
-                </p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="text-gray-400 text-left">
-                    <tr>
-                      <th className="py-1">job</th>
-                      <th>status</th>
-                      <th>type</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jobs.map((j) => (
-                      <tr key={j.job_id} className="border-t border-gray-700">
-                        <td className="py-1 font-mono text-xs">{j.job_id}</td>
-                        <td>{j.status}</td>
-                        <td>{j.inversion_type}</td>
-                        <td>
-                          {j.status === 'completed' && (
-                            <button
-                              onClick={() => loadModel(j.job_id)}
-                              className="text-blue-400 hover:underline"
-                            >
-                              view map
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+            <Link href="/dashboard" className={T.btnGhost}>
+              <Icon d={ICONS.back} size={14} /> Mission Control
+            </Link>
+            <button onClick={refreshJobs} className={T.btnGhost}>
+              <Icon d={ICONS.refresh} size={14} /> Refresh
+            </button>
           </>
+        }
+      />
+
+      <div className="px-8 py-6 max-w-5xl space-y-6">
+        <Card
+          title="Run an inversion"
+          sub="operates on the ingested mission measurements"
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={method}
+              onChange={(e) =>
+                setMethod(e.target.value as 'tikhonov' | 'ml_completion')
+              }
+              className={T.input}
+            >
+              <option value="tikhonov">Tikhonov (classical)</option>
+              <option value="ml_completion">
+                ML completion (beats baseline by 47%)
+              </option>
+            </select>
+            <button
+              onClick={runInversion}
+              disabled={busy}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              style={{ backgroundColor: T.accent }}
+            >
+              {busy ? 'Inverting…' : 'Run inversion on mission data'}
+            </button>
+            {busy && (
+              <span className={`text-xs ${T.ink3}`}>
+                solving on the inversion service…
+              </span>
+            )}
+          </div>
+          {error && (
+            <div className="mt-3">
+              <ErrorNote text={error} />
+            </div>
+          )}
+        </Card>
+
+        {model && (
+          <Card
+            title={model.model_id}
+            sub={`rms residual ${model.rms_residual?.toFixed(1) ?? '—'}`}
+          >
+            <AnomalyMap model={model} />
+          </Card>
         )}
+
+        <Card
+          title="Inversion jobs"
+          sub="inversion-service state, most recent first"
+        >
+          {jobs.length === 0 ? (
+            <p className={`text-sm ${T.ink3}`}>
+              No jobs yet — run an inversion above, or load mission data
+              with{' '}
+              <span className="font-mono text-xs">
+                docker compose run --rm mission-scenario
+              </span>
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <Th>Job</Th>
+                  <Th>Status</Th>
+                  <Th>Type</Th>
+                  <Th> </Th>
+                </tr>
+              </thead>
+              <tbody>
+                {jobs.map((j) => (
+                  <tr
+                    key={j.job_id}
+                    className="border-t border-[#161e2e] hover:bg-white/[0.02]"
+                  >
+                    <td className={`py-2.5 pr-4 font-mono text-xs ${T.ink2}`}>
+                      {j.job_id}
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      {jobStatusPill(j.status)}
+                    </td>
+                    <td className={`py-2.5 pr-4 text-xs ${T.ink2}`}>
+                      {j.inversion_type}
+                    </td>
+                    <td className="py-2.5">
+                      {j.status === 'completed' && (
+                        <button
+                          onClick={() => loadModel(j.job_id)}
+                          className="text-sm"
+                          style={{ color: T.accent }}
+                        >
+                          view map
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
       </div>
     </div>
   );

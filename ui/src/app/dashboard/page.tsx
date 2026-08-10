@@ -18,58 +18,22 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
-const GATEWAY =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:28000';
-
-/* ── design tokens ──────────────────────────────────────────────── */
-const T = {
-  app: 'bg-[#0a0e17]',
-  card: 'bg-[#101624] border border-[#1c2537] rounded-xl',
-  rail: 'bg-[#070b12] border-r border-[#161e2e]',
-  ink: 'text-[#eef2f9]',
-  ink2: 'text-[#97a3ba]',
-  ink3: 'text-[#5c6a84]',
-  accent: '#3987e5',
-};
-
-const STATUS = {
-  good: '#0ca30c',
-  warning: '#fab219',
-  serious: '#ec835a',
-  critical: '#d03b3b',
-} as const;
-
-/* ── icons (inline, stroke = currentColor) ──────────────────────── */
-const Icon = ({ d, size = 16 }: { d: string; size?: number }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.7"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className="shrink-0"
-  >
-    <path d={d} />
-  </svg>
-);
-
-const ICONS: Record<string, string> = {
-  overview: 'M3 12h4l3-8 4 16 3-8h4',
-  jobs: 'M4 17l6-6-6-6M12 19h8',
-  inversion:
-    'M12 3a9 9 0 1 0 9 9M12 3v9h9M12 3a9 9 0 0 1 9 9',
-  data: 'M12 3c-4.4 0-8 1.3-8 3v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6c0-1.7-3.6-3-8-3ZM4 6c0 1.7 3.6 3 8 3s8-1.3 8-3M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
-  ml: 'M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3M7 7h10v10H7zM10 10h4v4h-4z',
-  workflows: 'M5 5h5v5H5zM14 14h5v5h-5zM10 7.5h7v9',
-  monitoring:
-    'M22 12h-4l-3 9L9 3l-3 9H2',
-  refresh:
-    'M21 12a9 9 0 1 1-2.6-6.3M21 3v6h-6',
-  external: 'M14 5h5v5M19 5l-8 8M12 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-6',
-};
+import {
+  Card,
+  GATEWAY,
+  Icon,
+  ICONS,
+  jobStatusPill,
+  okPill,
+  OrbitMark,
+  pct,
+  SignIn,
+  StatTile,
+  StatusPill,
+  T,
+  Th,
+  useAuthToken,
+} from '@/lib/console-ui';
 
 const SECTIONS = [
   { id: 'overview', name: 'Overview', desc: 'Health & mission totals' },
@@ -83,146 +47,10 @@ const SECTIONS = [
 
 type SectionId = (typeof SECTIONS)[number]['id'];
 
-/* ── shared pieces ──────────────────────────────────────────────── */
-
-function StatusPill({
-  kind,
-  label,
-}: {
-  kind: keyof typeof STATUS;
-  label: string;
-}) {
-  const c = STATUS[kind];
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
-      style={{ color: c, backgroundColor: `${c}1a`, border: `1px solid ${c}33` }}
-    >
-      <span
-        className="inline-block w-1.5 h-1.5 rounded-full"
-        style={{ backgroundColor: c }}
-      />
-      {label}
-    </span>
-  );
-}
-
-const okPill = (ok: boolean, okLabel = 'healthy', badLabel = 'down') =>
-  ok ? (
-    <StatusPill kind="good" label={okLabel} />
-  ) : (
-    <StatusPill kind="critical" label={badLabel} />
-  );
-
-function Card({
-  title,
-  sub,
-  error,
-  children,
-  actions,
-  className = '',
-}: {
-  title?: string;
-  sub?: string;
-  error?: string | null;
-  children: React.ReactNode;
-  actions?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`${T.card} ${className}`}>
-      {(title || actions) && (
-        <div className="flex items-start justify-between px-5 pt-4 pb-3 border-b border-[#161e2e]">
-          <div>
-            {title && (
-              <h2 className={`text-sm font-semibold ${T.ink}`}>{title}</h2>
-            )}
-            {sub && <p className={`text-xs mt-0.5 ${T.ink3}`}>{sub}</p>}
-          </div>
-          {actions}
-        </div>
-      )}
-      <div className="px-5 py-4">
-        {error ? (
-          <div
-            className="rounded-lg px-3 py-2 text-xs"
-            style={{
-              color: STATUS.critical,
-              backgroundColor: `${STATUS.critical}14`,
-              border: `1px solid ${STATUS.critical}33`,
-            }}
-          >
-            {error}
-          </div>
-        ) : (
-          children
-        )}
-      </div>
-    </div>
-  );
-}
-
-function StatTile({
-  value,
-  label,
-  hint,
-}: {
-  value: React.ReactNode;
-  label: string;
-  hint?: string;
-}) {
-  return (
-    <div className={`${T.card} px-5 py-4`}>
-      <div
-        className={`text-2xl font-semibold tracking-tight tabular-nums ${T.ink}`}
-      >
-        {value}
-      </div>
-      <div className={`text-xs mt-1 ${T.ink2}`}>{label}</div>
-      {hint && <div className={`text-[11px] mt-0.5 ${T.ink3}`}>{hint}</div>}
-    </div>
-  );
-}
-
-const Th = ({ children }: { children: React.ReactNode }) => (
-  <th className="pb-2.5 pr-4 text-left text-[11px] font-medium uppercase tracking-wider text-[#5c6a84]">
-    {children}
-  </th>
-);
-
-const pct = (p: any) =>
-  p == null ? '—' : `${Math.round(p <= 1 ? p * 100 : p)}%`;
-
-/* ── auth ───────────────────────────────────────────────────────── */
-
-function useAuthToken() {
-  const [token, setToken] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const login = useCallback(async (email: string, password: string) => {
-    setError(null);
-    const resp = await fetch(`${GATEWAY}/auth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!resp.ok) {
-      setError(`Login failed (${resp.status})`);
-      return;
-    }
-    setToken((await resp.json()).access_token);
-  }, []);
-  return { token, error, login };
-}
-
 /* ── page ───────────────────────────────────────────────────────── */
 
 export default function DashboardPage() {
   const { token, error: authError, login } = useAuthToken();
-  const isDev = process.env.NODE_ENV === 'development';
-  const [email, setEmail] = useState(isDev ? 'mission-sim@galileo.dev' : '');
-  const [password, setPassword] = useState(
-    isDev ? 'mission-scenario-2026' : ''
-  );
   const [section, setSection] = useState<SectionId>('overview');
 
   const [health, setHealth] = useState<any>(null);
@@ -374,69 +202,13 @@ export default function DashboardPage() {
     }
   };
 
-  /* ── sign-in ──────────────────────────────────────────────────── */
   if (!token) {
     return (
-      <div
-        className={`min-h-screen ${T.app} ${T.ink} flex items-center justify-center p-8`}
-      >
-        <div className="w-full max-w-sm">
-          <div className="flex items-center gap-3 mb-8 justify-center">
-            <OrbitMark />
-            <div>
-              <div className="font-semibold tracking-tight">
-                GALILEO Mission Control
-              </div>
-              <div className={`text-xs ${T.ink3}`}>
-                satellite gravimetry platform
-              </div>
-            </div>
-          </div>
-          <form
-            className={`${T.card} p-6 space-y-4`}
-            onSubmit={(e) => {
-              e.preventDefault();
-              login(email.trim(), password);
-            }}
-          >
-            <div>
-              <label className={`block text-xs mb-1.5 ${T.ink2}`}>
-                Email
-              </label>
-              <input
-                className="w-full rounded-lg bg-[#0a0e17] border border-[#1c2537] px-3 py-2 text-sm focus:outline-none focus:border-[#3987e5]"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className={`block text-xs mb-1.5 ${T.ink2}`}>
-                Password
-              </label>
-              <input
-                className="w-full rounded-lg bg-[#0a0e17] border border-[#1c2537] px-3 py-2 text-sm focus:outline-none focus:border-[#3987e5]"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <button
-              className="w-full rounded-lg py-2 text-sm font-medium text-white transition-colors"
-              style={{ backgroundColor: T.accent }}
-            >
-              Sign in
-            </button>
-            {authError && (
-              <p className="text-xs" style={{ color: STATUS.critical }}>
-                {authError}
-              </p>
-            )}
-          </form>
-          <p className={`text-center text-[11px] mt-4 ${T.ink3}`}>
-            live platform state · no fabricated data
-          </p>
-        </div>
-      </div>
+      <SignIn
+        subtitle="satellite gravimetry platform"
+        onLogin={login}
+        error={authError}
+      />
     );
   }
 
@@ -477,15 +249,7 @@ export default function DashboardPage() {
                 <td className={`py-2.5 pr-4 font-mono text-xs ${T.ink2}`}>
                   {j.job_id}
                 </td>
-                <td className="py-2.5 pr-4">
-                  {j.status === 'completed' ? (
-                    <StatusPill kind="good" label="completed" />
-                  ) : j.status === 'failed' ? (
-                    <StatusPill kind="critical" label="failed" />
-                  ) : (
-                    <StatusPill kind="warning" label={j.status} />
-                  )}
-                </td>
+                <td className="py-2.5 pr-4">{jobStatusPill(j.status)}</td>
                 <td className={`py-2.5 tabular-nums ${T.ink}`}>
                   {pct(j.progress)}
                 </td>
@@ -952,30 +716,5 @@ export default function DashboardPage() {
         <div className="px-8 py-6 max-w-6xl">{content[section]}</div>
       </main>
     </div>
-  );
-}
-
-/* ── logo mark ──────────────────────────────────────────────────── */
-function OrbitMark() {
-  return (
-    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <circle
-        cx="17"
-        cy="17"
-        r="7"
-        stroke="#3987e5"
-        strokeWidth="1.8"
-      />
-      <ellipse
-        cx="17"
-        cy="17"
-        rx="15"
-        ry="6"
-        stroke="#5c6a84"
-        strokeWidth="1.2"
-        transform="rotate(-22 17 17)"
-      />
-      <circle cx="29.5" cy="11.5" r="2.2" fill="#3987e5" />
-    </svg>
   );
 }
