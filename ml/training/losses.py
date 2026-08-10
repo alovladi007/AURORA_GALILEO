@@ -197,27 +197,18 @@ if HAS_TORCH:
                 model1 = model1.unsqueeze(1)
                 model2 = model2.unsqueeze(1)
             
-            # Gradients of model1
-            dx1 = model1[:, :, :, 1:] - model1[:, :, :, :-1]
-            dy1 = model1[:, :, 1:, :] - model1[:, :, :-1, :]
-            
-            # Gradients of model2
-            dx2 = model2[:, :, :, 1:] - model2[:, :, :, :-1]
-            dy2 = model2[:, :, 1:, :] - model2[:, :, :-1, :]
-            
-            # Align shapes (take minimum)
-            min_h = min(dx1.shape[2], dx2.shape[2])
-            min_w_dx = min(dx1.shape[3], dx2.shape[3])
-            min_w_dy = min(dy1.shape[3], dy2.shape[3])
-            
-            dx1 = dx1[:, :, :min_h, :min_w_dx]
-            dx2 = dx2[:, :, :min_h, :min_w_dx]
-            dy1 = dy1[:, :, :min_h, :min_w_dy]
-            dy2 = dy2[:, :, :min_h, :min_w_dy]
-            
-            # Cross-gradient: (∇m1 × ∇m2)^2
-            # In 2D: (dx1*dy2 - dy1*dx2)^2
-            cross_grad = (dx1 * dy2[:, :, :, :min_w_dx] - dy1[:, :, :, :min_w_dy] * dx2) ** 2
+            # Finite differences live on staggered grids: dx has shape
+            # (B, C, H, W-1) and dy has shape (B, C, H-1, W). Crop both
+            # to the common (H-1, W-1) grid before combining - the
+            # previous "min" alignment only truncated widths, so any
+            # input crashed on the height mismatch.
+            dx1 = (model1[:, :, :, 1:] - model1[:, :, :, :-1])[:, :, :-1, :]
+            dy1 = (model1[:, :, 1:, :] - model1[:, :, :-1, :])[:, :, :, :-1]
+            dx2 = (model2[:, :, :, 1:] - model2[:, :, :, :-1])[:, :, :-1, :]
+            dy2 = (model2[:, :, 1:, :] - model2[:, :, :-1, :])[:, :, :, :-1]
+
+            # Cross-gradient: (∇m1 × ∇m2)^2 = (dx1*dy2 - dy1*dx2)^2
+            cross_grad = (dx1 * dy2 - dy1 * dx2) ** 2
             
             return self.weight * torch.mean(cross_grad)
     

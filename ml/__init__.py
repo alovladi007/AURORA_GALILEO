@@ -65,3 +65,41 @@ __all__ = [
     'BayesianNN',
     'DeepEnsemble',
 ]
+
+# ── Torch-dependent training stack (PINN + U-Net) ───────────────────
+# Guarded: the core package must import without torch (the jax-side
+# API above stays available); tests importorskip("torch") before
+# using these. When torch IS available, the torch GravityPINN below
+# intentionally overrides the jax-side export of the same name - it
+# is the one PINNTrainer consumes.
+try:
+    from .pinn import (
+        GravityPINN,
+        PINNTrainer,
+        GravityDataset,
+        generate_synthetic_gravity_data,
+    )
+    from .unet import (
+        UNetGravity,
+        UNetTrainer,
+        MCDropoutUncertainty,
+        EnsembleUncertainty,
+    )
+    from .train import (
+        PhaseGravityDataset,
+        generate_synthetic_phase_gravity_pairs,
+    )
+
+    __all__ += [
+        'PINNTrainer',
+        'GravityDataset',
+        'generate_synthetic_gravity_data',
+        'UNetGravity',
+        'UNetTrainer',
+        'MCDropoutUncertainty',
+        'EnsembleUncertainty',
+        'PhaseGravityDataset',
+        'generate_synthetic_phase_gravity_pairs',
+    ]
+except ImportError:
+    pass

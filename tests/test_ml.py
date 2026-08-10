@@ -291,22 +291,26 @@ class TestMetrics:
     def test_ssim_computation(self):
         """Test SSIM metric."""
         trainer = UNetTrainer(UNetGravity(), device='cpu')
-        
+        torch.manual_seed(0)  # unseeded randn made this test flaky
+
         # Perfect prediction
         target = torch.randn(1, 1, 32, 32)
         pred = target.clone()
-        
+
         ssim = trainer.compute_ssim(pred, target)
-        
+
         # SSIM should be close to 1 for identical images
         assert ssim > 0.95
-        
-        # Different prediction
+
+        # Different prediction: SSIM's true range is [-1, 1], and for
+        # uncorrelated noise it hovers around 0 (slightly negative is
+        # legitimate - the old 0 <= ssim assertion was wrong).
         pred_diff = torch.randn(1, 1, 32, 32)
         ssim_diff = trainer.compute_ssim(pred_diff, target)
-        
+
         assert ssim_diff < ssim
-        assert 0 <= ssim_diff <= 1
+        assert -1 <= ssim_diff <= 1
+        assert ssim_diff < 0.5
 
 
 class TestEndToEnd:

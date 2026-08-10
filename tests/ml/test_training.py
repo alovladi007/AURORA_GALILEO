@@ -179,11 +179,19 @@ class TestTrainer:
     
     def test_early_stopping(self):
         """Test early stopping."""
+        # Random labels mean early stopping fires at an RNG-dependent
+        # epoch; seed so the test is independent of execution order.
+        torch.manual_seed(0)
         model = nn.Sequential(nn.Linear(10, 1))
         
+        # High learning rate so the model converges (and the val loss
+        # plateaus) well inside max_epochs - at the default 1e-3 a
+        # Linear(10,1) can keep improving by more than min_delta for
+        # all 100 epochs, which is not an early-stopping failure.
         config = TrainingConfig(
             max_epochs=100,
             patience=5,
+            learning_rate=1e-1,
             verbose=False,
         )
         
