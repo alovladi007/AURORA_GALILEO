@@ -316,7 +316,11 @@ export default function DashboardPage() {
                       {j.status}
                     </td>
                     <td className="py-1.5">
-                      {j.progress != null ? `${j.progress}%` : '—'}
+                      {j.progress != null
+                        ? `${Math.round(
+                            j.progress <= 1 ? j.progress * 100 : j.progress
+                          )}%`
+                        : '—'}
                     </td>
                   </tr>
                 ))}
