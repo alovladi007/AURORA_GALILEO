@@ -344,7 +344,13 @@ services:
       context: .
       dockerfile_inline: |
         FROM python:3.11-slim
-        RUN pip install --no-cache-dir mlflow==2.8.0 psycopg2-binary boto3
+        # gcc/python3-dev: on linux/arm64 (Apple Silicon) mlflow 2.8.0
+        # resolves a psutil version with no arm64 wheel, so pip builds
+        # it from source.
+        RUN apt-get update && apt-get install -y --no-install-recommends \
+                gcc python3-dev \
+            && rm -rf /var/lib/apt/lists/* \
+            && pip install --no-cache-dir mlflow==2.8.0 psycopg2-binary boto3
         EXPOSE 5000
         CMD ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000"]
       network: host
