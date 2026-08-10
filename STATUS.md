@@ -130,7 +130,19 @@ platform's masked Tikhonov path. Acceptance: signal survives binning
 (>50% of injected amplitude), peak recovered within 2 grid cells of
 the injection point, recovered amplitude >=60% of the observed signal
 without amplification, and far-field spurious structure <15% of the
-peak. All four gates pass. (The benchmark's first version exposed a
+peak. All four gates pass.
+
+**Phase 4 W4.1 (ML on real pipeline outputs) — ship criterion MET:**
+ml/gravity_completion.py is a learned gravity-map completion model
+(RBF kernel ridge) whose hyperparameters are fit by cross-validated
+grid search over mission-generator scenarios. Trained on three
+scenarios (varied seeds, amplitudes, sigmas, anomaly placements) and
+evaluated on the held-out closed-loop benchmark scenario, it beats
+the classical Tikhonov baseline by 47% (3.54 vs 6.66 mGal full-map
+RMS), recovers the peak within 2 cells, and round-trips through
+serialization. Per the master prompt, an ML product ships ONLY if it
+beats the classical baseline — this gate is now a permanent test
+(tests/ml/test_gravity_completion.py). (The benchmark's first version exposed a
 real lesson now encoded in it: inverting against the raw +/-2300 mGal
 J2 background crushes local signals — reference-field removal is
 mandatory, as in every real processor.)
@@ -172,7 +184,7 @@ In progress / next (see master prompt for full list):
 ## Test Baseline (repo-root suite, 2026-07-17)
 
 ```
-Root suite: 309 passed, 0 failed. Service suites: data 10, ml 16,
+Root suite: 313 passed, 0 failed. Service suites: data 10, ml 16,
 control 14, inversion 25, gateway 35 — all passing.
 ```
 
