@@ -119,6 +119,22 @@ inversions on the ingested mission data, poll to completion, and
 render the anomaly map from the served grid on a canvas — with error
 states, no client-side fallbacks. UI builds clean (0 type errors).
 
+**Phase 3 flagship KPI — closed-loop anomaly recovery (LIVE in the
+test suite):** tests/mission/test_closed_loop_recovery.py injects an
+80 mGal ground-fixed Gaussian anomaly under an actual overflight of
+the two-satellite formation, generates observables from the real
+field, bins them exactly as the platform's fetcher does, removes the
+reference field via a twin background scenario (identical tracks and
+noise draws — standard gravimetry practice), and inverts through the
+platform's masked Tikhonov path. Acceptance: signal survives binning
+(>50% of injected amplitude), peak recovered within 2 grid cells of
+the injection point, recovered amplitude >=60% of the observed signal
+without amplification, and far-field spurious structure <15% of the
+peak. All four gates pass. (The benchmark's first version exposed a
+real lesson now encoded in it: inverting against the raw +/-2300 mGal
+J2 background crushes local signals — reference-field removal is
+mandatory, as in every real processor.)
+
 **Gate 0 (2026-08-09, verified on a live Docker stack):** 14/14
 containers healthy from the canonical `docker-compose.yaml`; gateway
 /health reports all four gRPC services connected; register -> JWT
@@ -156,8 +172,8 @@ In progress / next (see master prompt for full list):
 ## Test Baseline (repo-root suite, 2026-07-17)
 
 ```
-Root suite: 305 passed, 0 failed. Service suites: data 10, ml 16,
-control 14, inversion 22, gateway 35 — all passing.
+Root suite: 309 passed, 0 failed. Service suites: data 10, ml 16,
+control 14, inversion 25, gateway 35 — all passing.
 ```
 
 All 17 previously-failing tests are fixed by real implementations (see

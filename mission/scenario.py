@@ -77,6 +77,10 @@ class MissionConfig:
     satellite_ids: Tuple[str, str] = ("GAL-SIM-A", "GAL-SIM-B")
     telemetry_noise_m: float = 1.0    # per-axis position noise (1 sigma)
     gravity_noise_mgal: float = 0.05  # measurement noise (1 sigma)
+    # Ground-fixed local anomalies injected on top of the global field:
+    # tuple of dicts {lat, lon, amplitude_mgal, sigma_deg}. Used by the
+    # closed-loop recovery benchmark (inject -> fly over -> recover).
+    anomalies: Tuple[Dict, ...] = ()
 
 
 @dataclass
@@ -136,10 +140,12 @@ class MissionScenario:
             )
 
     # ── Observable synthesis ─────────────────────────────────────────
-    def _gravity_anomaly_mgal(self, r_eci_km: np.ndarray) -> float:
+    def _gravity_anomaly_mgal(self, r_eci_km: np.ndarray,
+                              t: float = 0.0) -> float:
         """Radial gravity anomaly at the satellite location: full
         spherical-harmonic field minus the central term, in mGal
-        (1 mGal = 1e-5 m/s^2)."""
+        (1 mGal = 1e-5 m/s^2), plus any injected ground-fixed local
+        anomalies (Gaussian bumps in the Earth-fixed frame)."""
         pos_m = jnp.asarray(r_eci_km * 1e3)
         a_full = np.asarray(self._gravity_field.gravitational_acceleration(pos_m))
         r = float(np.linalg.norm(np.asarray(pos_m)))
@@ -147,7 +153,19 @@ class MissionScenario:
         d_a = a_full - a_central
         # Signed radial component of the perturbation
         radial = float(np.dot(d_a, np.asarray(pos_m)) / r)
-        return radial / 1e-5
+        total = radial / 1e-5
+
+        if self.config.anomalies:
+            r_ecef = eci_to_ecef(np.asarray(r_eci_km), float(t))
+            lat, lon, _ = ecef_to_geodetic_spherical(r_ecef)
+            for a in self.config.anomalies:
+                dlat = lat - a["lat"]
+                dlon = (lon - a["lon"] + 180.0) % 360.0 - 180.0
+                sig = a.get("sigma_deg", 10.0)
+                total += a["amplitude_mgal"] * float(
+                    np.exp(-(dlat**2 + dlon**2) / (2.0 * sig**2))
+                )
+        return total
 
     def synthesize(self, epoch_iso: str = "2026-08-10T00:00:00") -> None:
         """Build telemetry + gravity records for every sample."""
@@ -187,7 +205,7 @@ class MissionScenario:
                     ),
                 })
 
-                anomaly = self._gravity_anomaly_mgal(r_eci)
+                anomaly = self._gravity_anomaly_mgal(r_eci, float(t))
                 arc.gravity.append({
                     "satellite_id": arc.satellite_id,
                     "timestamp": stamp,
