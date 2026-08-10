@@ -1,0 +1,46 @@
+# Alert rules referencing ONLY metrics that are actually emitted:
+#  - http_* and circuit_breaker_state from the gateway metrics module
+#  - pg_up / redis_up from the postgres/redis exporters in compose
+groups:
+  - name: galileo-gateway
+    rules:
+      - alert: GatewayHighErrorRate
+        expr: >
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(http_requests_total[5m])), 1e-9) > 0.05
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: ">5% of gateway requests are failing (5xx)"
+
+      - alert: GatewayHighLatencyP95
+        expr: >
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Gateway p95 latency above 2s"
+
+      - alert: CircuitBreakerOpen
+        expr: max(circuit_breaker_state) >= 1
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: "A gateway circuit breaker is open"
+
+  - name: galileo-datastores
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "PostgreSQL is unreachable"
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Redis is unreachable"

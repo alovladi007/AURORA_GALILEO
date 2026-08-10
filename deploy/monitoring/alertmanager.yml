@@ -1,0 +1,18 @@
+# Valid static config. Alertmanager does NOT expand environment
+# variables in its config file (the old setup interpolated
+# ${SLACK_WEBHOOK_URL} and failed validation at startup); configure a
+# real receiver by editing this file or mounting a replacement.
+route:
+  receiver: default
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: default
+    # Webhook receiver pointed at a placeholder sink; replace with your
+    # Slack/PagerDuty/webhook integration for real notifications.
+    webhook_configs:
+      - url: http://127.0.0.1:9999/alerts
+        send_resolved: true

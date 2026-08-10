@@ -308,7 +308,16 @@ BEGIN
 END
 $body$;
 
-SELECT add_job('analyze_hypertables', INTERVAL '6 hours');
+-- Idempotent job registration (plain add_job would duplicate the job
+-- every time this script re-runs, e.g. via the alembic migration)
+DO $do$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM timescaledb_information.jobs
+                   WHERE proc_name = 'analyze_hypertables') THEN
+        PERFORM add_job('analyze_hypertables', INTERVAL '6 hours');
+    END IF;
+END
+$do$;
 
 CREATE OR REPLACE PROCEDURE analyze_api_metrics(job_id INT, config JSONB)
 LANGUAGE plpgsql AS $body$
@@ -317,7 +326,14 @@ BEGIN
 END
 $body$;
 
-SELECT add_job('analyze_api_metrics', INTERVAL '1 hour');
+DO $do$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM timescaledb_information.jobs
+                   WHERE proc_name = 'analyze_api_metrics') THEN
+        PERFORM add_job('analyze_api_metrics', INTERVAL '1 hour');
+    END IF;
+END
+$do$;
 
 -- Done!
 SELECT 'TimescaleDB setup complete' AS status,

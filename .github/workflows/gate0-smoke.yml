@@ -73,6 +73,41 @@ jobs:
           test "$code" = "401"
           echo "auth round-trip OK"
 
+      - name: Alembic migration check (idempotent on bootstrapped DB + fresh DB)
+        run: |
+          pip -q install alembic sqlalchemy psycopg2-binary
+          export DATABASE_URL="postgresql://galileo:galileo_dev@localhost:27432/galileo"
+          python3 -m alembic upgrade head
+          python3 -m alembic upgrade head   # second run must be a no-op
+          # No duplicate maintenance jobs after repeated runs
+          dup=$(docker compose exec -T postgres psql -U galileo -d galileo -tc \
+            "SELECT count(*) FROM timescaledb_information.jobs WHERE proc_name LIKE 'analyze%'")
+          test "$(echo $dup | tr -d ' ')" = "2"
+          # Fresh database bootstraps fully from the migration alone
+          docker compose exec -T postgres psql -U galileo -c "CREATE DATABASE migration_test"
+          DATABASE_URL="postgresql://galileo:galileo_dev@localhost:27432/migration_test" \
+            python3 -m alembic upgrade head
+          docker compose exec -T postgres psql -U galileo -d migration_test -tc \
+            "SELECT count(*) FROM timescaledb_information.hypertables" | grep -qE "[1-9]"
+          echo "alembic checks OK"
+
+      - name: Observability sanity (all scrape targets up, rules loaded)
+        run: |
+          sleep 20
+          curl -s http://localhost:29090/api/v1/targets | python3 -c '
+          import sys, json
+          d = json.load(sys.stdin)["data"]["activeTargets"]
+          bad = [t["labels"]["job"] for t in d if t["health"] != "up"]
+          assert not bad, f"targets down: {bad}"
+          assert len(d) >= 4, f"expected >=4 targets, got {len(d)}"
+          print("targets:", [t["labels"]["job"] for t in d])
+          '
+          rules=$(curl -s http://localhost:29090/api/v1/rules | python3 -c \
+            "import sys,json; print(sum(len(g['rules']) for g in json.load(sys.stdin)['data']['groups']))")
+          test "$rules" -ge 5
+          curl -sf http://localhost:29093/-/healthy > /dev/null
+          echo "observability OK ($rules rules)"
+
       - name: Database sanity (hypertables + mlflow DB)
         run: |
           docker compose exec -T postgres psql -U galileo -d galileo -tc \

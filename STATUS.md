@@ -66,6 +66,22 @@ presence alone caused infinite retries and starved the in-process
 queue), tuner job-id collisions within the same second, and the
 conditional-mlflow test patch. All five service suites green.
 
+**Phase 2 W2.2 (schema authority):** Alembic rebuilt around the
+canonical schema — env.py targets the data-service ORM; the initial
+migration executes ops/db/timescale_setup.sql (now fully idempotent,
+including guarded add_job registration). Verified live: upgrade on a
+container-bootstrapped DB is a no-op with no duplicate jobs; a fresh
+empty database bootstraps completely from the migration alone (3
+hypertables). Both checks now run in the Gate 0 CI job.
+
+**Phase 2 W2.5 (observability observes):** postgres/redis exporters
+and Alertmanager (valid static config — the env-interpolation config
+that failed validation is gone) added to the canonical stack; alert
+rules reference only actually-emitted metrics (gateway http_*/
+circuit_breaker_state, exporter pg_up/redis_up). Verified live: all 4
+Prometheus scrape targets UP, 5 rules loaded and healthy, pg_up=1.
+Target/rule sanity now runs in the Gate 0 CI job.
+
 **Gate 0 (2026-08-09, verified on a live Docker stack):** 14/14
 containers healthy from the canonical `docker-compose.yaml`; gateway
 /health reports all four gRPC services connected; register -> JWT
