@@ -19,6 +19,12 @@ COPY proto/ ./proto/
 # Copy application
 COPY services/inversion-service/src/ ./src/
 
+# Shipped ML artifacts + the completion module (Phase 4): the engine's
+# ml_completion method loads ml/models/gravity_completion_v1.json
+COPY ml/__init__.py ./ml/__init__.py
+COPY ml/gravity_completion.py ./ml/gravity_completion.py
+COPY ml/models/ ./ml/models/
+
 # Create gen directory for protobuf output
 RUN mkdir -p src/gen
 

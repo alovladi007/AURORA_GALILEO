@@ -142,7 +142,21 @@ the classical Tikhonov baseline by 47% (3.54 vs 6.66 mGal full-map
 RMS), recovers the peak within 2 cells, and round-trips through
 serialization. Per the master prompt, an ML product ships ONLY if it
 beats the classical baseline — this gate is now a permanent test
-(tests/ml/test_gravity_completion.py). (The benchmark's first version exposed a
+(tests/ml/test_gravity_completion.py).
+
+**Phase 4 W4.2 (ML serving), verified live:** the benchmark-winning
+completion model ships as a versioned artifact
+(ml/models/gravity_completion_v1.json, with full training/benchmark
+provenance) and is served through the platform: the inversion engine's
+'ml_completion' method loads the artifact (module loaded by file path
+— the container ships only the completion module, and depth-safe
+parent search avoids the parents[k] container trap), the gateway
+accepts parameters.method='ml_completion', and the /gravity UI offers
+a method selector (Tikhonov vs ML). Verified live end-to-end: an
+ML-completion map of the ingested mission measurements served over
+REST with correct J2 physics (range -1169..+2221 mGal). A service
+test pins the served result bit-equal to the shipped model's own
+prediction. (The benchmark's first version exposed a
 real lesson now encoded in it: inverting against the raw +/-2300 mGal
 J2 background crushes local signals — reference-field removal is
 mandatory, as in every real processor.)

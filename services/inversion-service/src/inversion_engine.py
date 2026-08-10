@@ -384,6 +384,13 @@ class InversionEngine:
                     job, data, (n_rows, n_cols),
                     multiscale_levels, rng, job.inversion_type
                 )
+            elif job.inversion_type.lower() in ("ml_completion", "ml"):
+                # Learned completion model (Phase 4 W4.1): shipped only
+                # because it beat the Tikhonov baseline on the
+                # closed-loop benchmark (see ml/models/*.json provenance)
+                job.message = "Running learned gravity completion"
+                result = self._run_ml_completion(job, data, (n_rows, n_cols))
+                true_model = None
             else:
                 # Standard single-scale solvers
                 itype = job.inversion_type.lower()
@@ -424,6 +431,57 @@ class InversionEngine:
             job.error = str(exc)
             job.message = f"Inversion failed: {exc}"
             job.completed_at = datetime.utcnow()
+
+    def _run_ml_completion(self, job, data, grid_shape) -> Dict:
+        """Learned RBF completion using the shipped model artifact."""
+        import importlib.util as _ilu
+        import json as _json
+        from pathlib import Path as _Path
+
+        # Locate the shipped ml/ directory by walking up from this
+        # file (repo checkout: repo root; container: /app). Never index
+        # parents[k] directly - the container tree is shallower than
+        # the repo and a fixed index raises IndexError.
+        ml_dir = None
+        for base in _Path(__file__).resolve().parents:
+            candidate = base / "ml"
+            if (candidate / "models" / "gravity_completion_v1.json").exists():
+                ml_dir = candidate
+                break
+        if ml_dir is None:
+            raise FileNotFoundError("gravity_completion_v1.json artifact")
+
+        # Load the module directly by file path: the container ships
+        # only the completion module + artifacts, and importing the ml
+        # PACKAGE would pull in submodules that are not shipped.
+        spec = _ilu.spec_from_file_location(
+            "gravity_completion", ml_dir / "gravity_completion.py")
+        mod = _ilu.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        GravityMapCompleter = mod.GravityMapCompleter
+
+        artifact = ml_dir / "models" / "gravity_completion_v1.json"
+        cfg = _json.loads(artifact.read_text())
+        completer = GravityMapCompleter.from_dict(cfg)
+        job.config["model_artifact"] = f"{cfg['model']}_{cfg['version']}"
+
+        rows, cols = grid_shape
+        counts = (job.cell_counts.reshape(rows, cols)
+                  if job.cell_counts is not None
+                  else np.ones((rows, cols)))
+        observed_grid = np.zeros(rows * cols)
+        mask = counts.ravel() > 0
+        observed_grid[np.flatnonzero(mask)] = data
+        observed_grid = observed_grid.reshape(rows, cols)
+
+        job.progress = 0.5
+        model = completer.predict(observed_grid, counts)
+        resid = model.ravel()[mask] - data
+        return {
+            "model": model.ravel(),
+            "residual": float(np.sqrt(np.mean(resid**2))),
+            "uncertainties": None,
+        }
 
     def _run_tikhonov(self, job, G, L, data) -> Dict:
         solver = TikhonovSolver(G, L)

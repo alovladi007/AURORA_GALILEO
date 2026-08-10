@@ -1,0 +1,14 @@
+{
+  "model": "gravity_completion",
+  "version": "v1",
+  "length_scale": 1.0,
+  "alpha": 0.01,
+  "train_score_rms": null,
+  "provenance": {
+    "trained_on": "mission-generator scenarios seeds 7/11/23 (amplitudes 60/100/75 mGal, sigmas 15/22/12 deg, varied overflight placements)",
+    "selection": "cross-validated grid search over length_scale x alpha (ml/gravity_completion.py fit())",
+    "ship_criterion": "beat the Tikhonov baseline on the held-out closed-loop benchmark (seed 42) by >=10%",
+    "benchmark_result": "3.54 mGal full-map RMS vs baseline 6.66 mGal (47% better), peak within 2 cells",
+    "gate": "tests/ml/test_gravity_completion.py::TestLearnedCompletion::test_ml_beats_tikhonov_baseline_on_benchmark"
+  }
+}

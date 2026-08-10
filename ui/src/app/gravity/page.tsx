@@ -116,6 +116,9 @@ export default function GravityPage() {
   const [model, setModel] = useState<ModelGrid | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [method, setMethod] = useState<'tikhonov' | 'ml_completion'>(
+    'tikhonov'
+  );
 
   const authed = useCallback(
     (path: string, init?: RequestInit) =>
@@ -152,9 +155,9 @@ export default function GravityPage() {
       const resp = await authed('/api/v1/inversions', {
         method: 'POST',
         body: JSON.stringify({
-          name: 'ui-anomaly-map',
+          name: `ui-anomaly-map-${method}`,
           measurement_ids: ['GAL-SIM-A', 'GAL-SIM-B'],
-          parameters: { method: 'tikhonov' },
+          parameters: { method },
           grid: {
             min_latitude: -85,
             max_latitude: 85,
@@ -245,6 +248,18 @@ export default function GravityPage() {
         ) : (
           <>
             <div className="flex items-center gap-4">
+              <select
+                value={method}
+                onChange={(e) =>
+                  setMethod(e.target.value as 'tikhonov' | 'ml_completion')
+                }
+                className="bg-gray-700 rounded px-3 py-2"
+              >
+                <option value="tikhonov">Tikhonov (classical)</option>
+                <option value="ml_completion">
+                  ML completion (beat baseline by 47%)
+                </option>
+              </select>
               <button
                 onClick={runInversion}
                 disabled={busy}
