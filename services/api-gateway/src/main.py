@@ -3,7 +3,7 @@ API Gateway Service for GALILEO
 FastAPI-based REST API gateway that routes to gRPC microservices
 """
 
-from fastapi import FastAPI, Depends, HTTPException, Header, Request, status
+from fastapi import FastAPI, Depends, HTTPException, Header, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -263,9 +263,17 @@ async def ingest_telemetry(
                     longitude=telemetry_data["location"]["longitude"],
                     altitude=telemetry_data["location"]["altitude"],
                 ),
+                velocity_x=telemetry_data.get("velocity_x", 0.0),
+                velocity_y=telemetry_data.get("velocity_y", 0.0),
+                velocity_z=telemetry_data.get("velocity_z", 0.0),
                 temperature=telemetry_data.get("temperature", 0.0),
                 battery_level=telemetry_data.get("battery_level", 0.0),
             )
+            # Without this every record lands at epoch 0 in TimescaleDB
+            if telemetry_data.get("timestamp"):
+                telemetry.timestamp.FromJsonString(
+                    telemetry_data["timestamp"]
+                )
 
             grpc_request = data_service_pb2.IngestTelemetryRequest(
                 telemetry=[telemetry],
@@ -303,9 +311,11 @@ async def ingest_telemetry(
 @circuit_breaker("data_service_query", failure_threshold=5)
 async def query_telemetry(
     request: Request,
-    satellite_ids: List[str],
-    start_time: str,
-    end_time: str,
+    # Query(...) is required: a bare List[str] parameter on a GET route
+    # is treated as a JSON body by FastAPI, which browsers cannot send
+    satellite_ids: List[str] = Query(...),
+    start_time: str = Query(...),
+    end_time: str = Query(...),
     page: int = 1,
     page_size: int = 100,
     user_context: common_pb2.UserContext = Depends(get_user_context)
@@ -313,12 +323,13 @@ async def query_telemetry(
     """Query satellite telemetry data"""
     with trace_span("query_telemetry"):
         try:
+            # TimeRange fields are protobuf Timestamps, not strings
+            time_range = common_pb2.TimeRange()
+            time_range.start_time.FromJsonString(start_time)
+            time_range.end_time.FromJsonString(end_time)
             grpc_request = data_service_pb2.QueryTelemetryRequest(
                 satellite_ids=satellite_ids,
-                time_range=common_pb2.TimeRange(
-                    start_time=start_time,
-                    end_time=end_time,
-                ),
+                time_range=time_range,
                 pagination=common_pb2.PaginationRequest(
                     page=page,
                     page_size=page_size,
@@ -332,12 +343,16 @@ async def query_telemetry(
                 "telemetry": [
                     {
                         "satellite_id": t.satellite_id,
-                        "timestamp": t.timestamp,
+                        # protobuf Timestamp is not JSON-serializable
+                        "timestamp": t.timestamp.ToJsonString(),
                         "location": {
                             "latitude": t.location.latitude,
                             "longitude": t.location.longitude,
                             "altitude": t.location.altitude,
                         },
+                        "velocity_x": t.velocity_x,
+                        "velocity_y": t.velocity_y,
+                        "velocity_z": t.velocity_z,
                         "temperature": t.temperature,
                         "battery_level": t.battery_level,
                     }

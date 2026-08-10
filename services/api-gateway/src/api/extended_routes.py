@@ -106,9 +106,9 @@ def build_extended_router(grpc_manager, get_user_context: Callable) -> APIRouter
                 user_context=user_context,
             )
             if start_time and end_time:
-                req.time_range.CopyFrom(
-                    common_pb2.TimeRange(start_time=start_time, end_time=end_time)
-                )
+                # TimeRange fields are protobuf Timestamps, not strings
+                req.time_range.start_time.FromJsonString(start_time)
+                req.time_range.end_time.FromJsonString(end_time)
             resp = await grpc_manager.stubs["data"].QueryGravity(req)
             return MessageToDict(resp, preserving_proto_field_name=True)
         except grpc.RpcError as e:
@@ -230,9 +230,9 @@ def build_extended_router(grpc_manager, get_user_context: Callable) -> APIRouter
                 user_context=user_context,
             )
             if start_time and end_time:
-                req.time_range.CopyFrom(
-                    common_pb2.TimeRange(start_time=start_time, end_time=end_time)
-                )
+                # TimeRange fields are protobuf Timestamps, not strings
+                req.time_range.start_time.FromJsonString(start_time)
+                req.time_range.end_time.FromJsonString(end_time)
             resp = await grpc_manager.stubs["inversion"].ListInversions(req)
             return MessageToDict(resp, preserving_proto_field_name=True)
         except grpc.RpcError as e:
