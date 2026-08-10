@@ -5,14 +5,8 @@
  *
  * Sidebar-console layout wired entirely to live gateway endpoints —
  * failures render as failures, sections without a real backend say so.
- *
- * Design system (committed dark theme):
- *   surfaces  #0a0e17 app · #101624 card · #070b12 rail
- *   ink       #eef2f9 primary · #97a3ba secondary · #5c6a84 muted
- *   accent    #3987e5 (validated series-1 on dark surface)
- *   status    good #0ca30c · warning #fab219 · serious #ec835a ·
- *             critical #d03b3b — always paired with a text label,
- *             never color alone.
+ * Design tokens live in src/lib/console-ui.tsx (shared with the
+ * gravity and ops pages).
  */
 
 import Link from 'next/link';
@@ -244,7 +238,7 @@ export default function DashboardPage() {
             {jobs.slice(0, 12).map((j: any) => (
               <tr
                 key={j.job_id}
-                className="border-t border-[#161e2e] hover:bg-white/[0.02]"
+                className="border-t border-[#e4e7ec] hover:bg-[#f9fafb]"
               >
                 <td className={`py-2.5 pr-4 font-mono text-xs ${T.ink2}`}>
                   {j.job_id}
@@ -365,7 +359,7 @@ export default function DashboardPage() {
             <select
               value={invMethod}
               onChange={(e) => setInvMethod(e.target.value as any)}
-              className="rounded-lg bg-[#0a0e17] border border-[#1c2537] px-3 py-2 text-sm focus:outline-none focus:border-[#3987e5]"
+              className="rounded-lg bg-white border border-[#d0d5dd] px-3 py-2 text-sm focus:outline-none focus:border-[#3987e5]"
             >
               <option value="tikhonov">Tikhonov (classical)</option>
               <option value="ml_completion">ML completion</option>
@@ -418,7 +412,7 @@ export default function DashboardPage() {
                   {rows.slice(0, 10).map((m: any, i: number) => (
                     <tr
                       key={i}
-                      className="border-t border-[#161e2e] hover:bg-white/[0.02]"
+                      className="border-t border-[#e4e7ec] hover:bg-[#f9fafb]"
                     >
                       <td className={`py-2 pr-4 ${T.ink}`}>
                         {m.satellite_id}
@@ -650,9 +644,9 @@ export default function DashboardPage() {
                 key={s.id}
                 onClick={() => setSection(s.id)}
                 className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
-                  active ? 'bg-[#12203a]' : 'hover:bg-white/[0.03]'
+                  active ? 'bg-[#eaf2fc]' : 'hover:bg-[#f2f4f7]'
                 }`}
-                style={active ? { color: '#cfe3fb' } : undefined}
+                style={active ? { color: '#1b4d85' } : undefined}
               >
                 <span
                   className={active ? '' : T.ink3}
@@ -672,7 +666,7 @@ export default function DashboardPage() {
             );
           })}
         </nav>
-        <div className="mt-auto px-5 py-5 space-y-2 border-t border-[#161e2e]">
+        <div className="mt-auto px-5 py-5 space-y-2 border-t border-[#e4e7ec]">
           <Link
             href="/gravity"
             className="flex items-center gap-2 text-[13px]"
@@ -694,7 +688,7 @@ export default function DashboardPage() {
       </aside>
 
       <main className="flex-1 overflow-x-hidden">
-        <header className="flex items-center justify-between px-8 py-4 border-b border-[#161e2e]">
+        <header className="flex items-center justify-between px-8 py-4 border-b border-[#e4e7ec]">
           <div className="flex items-center gap-4">
             <h1 className="text-lg font-semibold tracking-tight">
               {SECTIONS.find((s) => s.id === section)?.name}
@@ -708,7 +702,7 @@ export default function DashboardPage() {
           </div>
           <button
             onClick={refresh}
-            className={`inline-flex items-center gap-2 rounded-lg border border-[#1c2537] bg-[#101624] px-3.5 py-2 text-sm hover:bg-[#151c2e] ${T.ink2}`}
+            className={T.btnGhost}
           >
             <Icon d={ICONS.refresh} size={14} /> Refresh
           </button>
